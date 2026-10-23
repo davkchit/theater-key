@@ -516,6 +516,18 @@ function childLine(knowledge, ageText) {
   return ageText + ' · ' + fit.name + ' (' + fit.ageRange + ')' + (fit.sure ? '' : ', уточнить группу')
 }
 
+// «ой ребенку 12» went into a real lead as the age: chatter before the number
+// is dropped. Only known filler words go, so «7, в декабре 8» or «будет 8»
+// reach the administrator as written.
+const AGE_FILLER = /^(ой|ну|а|ах|извините|простите|опечатка|ошибся|ошиблась|ребенку|ребёнку|ребенок|ребёнок|сыну|сын|дочке|дочери|дочь|дочка|мне|нам|ему|ей|это|уже|лет|нет|не)$/i
+function cleanAge(text) {
+  const s = String(text).trim()
+  const i = s.search(/\d/)
+  if (i <= 0) return s
+  const words = s.slice(0, i).split(/[\s,.!:;-]+/).filter(Boolean)
+  return words.every((w) => AGE_FILLER.test(w)) ? s.slice(i) : s
+}
+
 // «🧒 24» read oddly in a real lead -- somebody signing themselves up for the
 // adult course is not a child.
 function personIcon(knowledge, ageText) {
@@ -1294,7 +1306,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
       return { out, effects }
     }
     state.stepMiss = 0
-    const age = text.slice(0, 60)
+    const age = cleanAge(text).slice(0, 60)
     // "92" went into a real lead as a child's age: any digit used to count as an
     // answer. Free wording still has to work ("7, в декабре 8" -> 7), so only the
     // first number is sanity-checked, and only against absurd values -- an adult

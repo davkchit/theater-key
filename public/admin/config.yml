@@ -494,3 +494,4 @@ collections:
             fields:
               - { label: Год, name: year, widget: string }
               - { label: Название, name: title, widget: string, hint: 'Без кавычек — они добавятся сами' }
+              - { label: По чему поставлен, name: note, widget: string, required: false, hint: 'Например: по повести А. Линдгрен или пьеса Я. Пулинович. Видно под названием мелким шрифтом' }

@@ -3,6 +3,8 @@ import productionsContent from '../content/productions.json'
 export interface Production {
   year: string
   title: string
+  // where it comes from: «по повести А. Линдгрен», «пьеса Я. Пулинович»
+  note?: string
 }
 
 // Full staging history since 2003, from the theatre's own «о нас» document.

@@ -8,7 +8,7 @@ rm -rf /opt/kluch/site.new /opt/kluch/site.old
 cp -a "$src" /opt/kluch/site.new
 chown -R root:root /opt/kluch/site.new
 chmod -R a+rX /opt/kluch/site.new
-mv /opt/kluch/site /opt/kluch/site.old
+[ -d /opt/kluch/site ] && mv /opt/kluch/site /opt/kluch/site.old
 mv /opt/kluch/site.new /opt/kluch/site
 rm -rf /opt/kluch/site.old
 echo 'сайт обновлён'

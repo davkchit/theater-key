@@ -13,7 +13,8 @@ import {
 } from '../components/home2/parts'
 import { Torn } from '../components/home2/paper'
 import { PageHero } from '../components/home2/PageHero'
-import { galleryPhoto } from '../components/home2/homeData'
+import { galleryPhoto, showPath } from '../components/home2/homeData'
+import { shows } from '../data/shows'
 import { Reveal } from '../components/ui/Reveal'
 import starSvg from '../../assets/el-star.svg'
 import { directionPath } from '../data/directions'
@@ -36,6 +37,15 @@ const HISTORY: [string, string][] = [
 ]
 
 const TOURS = 'Сербия, Литва, Латвия, Беларусь, Армения'
+
+// from the theatre's «о нас» document
+const GRADUATES: [string, string][] = [
+  ['Роман Гуськов', 'Киноактёр'],
+  ['Игорь Василевский', 'Ведущий актёр драматического театра Удмуртии'],
+  ['Никита Кобелев', 'Художественный руководитель Александринского театра в Санкт-Петербурге'],
+]
+
+const inRepertoire = new Set(shows.map((s) => s.title))
 
 const DIRECTIONS = [
   {
@@ -194,6 +204,31 @@ export default function AboutPageV2() {
         </div>
       </section>
 
+      {/* graduates and joint projects */}
+      <section className={`${WRAP} pb-16`}>
+        <div className="border-ink/15 border-t pt-14 md:pt-20">
+          <SectionHead title="Наши выпускники" />
+          <p className="max-w-3xl text-[17px] leading-[1.6] md:text-[18px]">
+            Многие выпускники «Ключа» потом получили профессиональное театральное образование и
+            сейчас работают актёрами и режиссёрами.
+          </p>
+          <ul className="mt-10 grid gap-x-10 gap-y-8 md:grid-cols-3">
+            {GRADUATES.map(([name, role]) => (
+              <li key={name} className="border-ink border-t-2 pt-4">
+                <div className="font-heading text-[28px] leading-[1.05] font-bold uppercase md:text-[32px]">
+                  {name}
+                </div>
+                <p className="text-ink/80 mt-3 text-[16px] leading-[1.5]">{role}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="text-ink/80 mt-12 max-w-3xl text-[16px] leading-[1.6] md:text-[17px]">
+            Команда театра делала совместные проекты с камерным оркестром Игоря Лермана, с КАМАЗом и
+            другими, а на гастролях представляла Республику Татарстан.
+          </p>
+        </div>
+      </section>
+
       {/* awards */}
       <section className={`${WRAP} pb-16`}>
         <div className="border-ink/15 border-t pt-14 md:pt-20">
@@ -222,12 +257,30 @@ export default function AboutPageV2() {
             {productions.map((p) => (
               <li
                 key={p.year + p.title}
-                className="mb-3 flex break-inside-avoid items-baseline gap-4 text-[16px] leading-[1.4]"
+                className="mb-5 flex break-inside-avoid items-baseline gap-4 text-[16px] leading-[1.4]"
               >
                 <span className="font-heading text-brand-red w-12 flex-shrink-0 text-[15px] font-semibold">
                   {p.year}
                 </span>
-                <span>«{p.title}»</span>
+                <span>
+                  {/* still on stage: the title leads to the show's page */}
+                  {inRepertoire.has(p.title) ? (
+                    <Link
+                      to={showPath(p.title)}
+                      className="decoration-brand-red underline decoration-2 underline-offset-4"
+                    >
+                      «{p.title}»
+                    </Link>
+                  ) : (
+                    <>«{p.title}»</>
+                  )}
+                  {p.note && (
+                    <span className="text-ink/65 mt-1 block text-[14px] leading-[1.4]">
+                      {/* «М. Цветаевой» never splits after the initial */}
+                      {p.note.replace(/([А-ЯЁA-Z]\.) /g, '$1 ')}
+                    </span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

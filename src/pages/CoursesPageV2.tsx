@@ -23,6 +23,7 @@ import { galleryPhoto } from '../components/home2/homeData'
 import { Modal } from '../components/ui/Modal'
 import { Reveal } from '../components/ui/Reveal'
 import { scrollToId } from '../lib/scrollToId'
+import { mediaUrl } from '../lib/mediaUrl'
 import { SwallowIcon } from '../components/ui/SwallowIcon'
 import { SignupForm } from '../components/courses/SignupForm'
 import { DirectionForm } from '../components/directions/DirectionForm'
@@ -214,7 +215,7 @@ export default function CoursesPageV2() {
 
       {/* first screen: pupils on stage, the title on the dark side */}
       <PageHero
-        photo={galleryPhoto('spektakl-3')}
+        photo={mediaUrl('/uploads/shows/emil/3.jpg')}
         focus="50% 30%"
         alt="Ученики театра на сцене"
         seed={171}

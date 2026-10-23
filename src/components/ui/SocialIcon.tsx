@@ -14,7 +14,13 @@ export function SocialIcon({ social, className }: SocialIconProps) {
       {social.text}
     </span>
   ) : (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+    <svg
+      viewBox={social.viewBox ?? '0 0 24 24'}
+      width="20"
+      height="20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
       <path d={social.path} fillRule={social.evenodd ? 'evenodd' : undefined} />
     </svg>
   )

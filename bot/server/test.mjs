@@ -132,6 +132,22 @@ test('запись на курс до конца: заявка в базе, ка
   t.close()
 })
 
+test('возраст в заявке без лишних слов: «ой ребенку 12» -> 12', async () => {
+  const t = rig()
+  await t.say(12, 'запишите на курс')
+  await t.tap(12, 'consent:yes')
+  await t.say(12, 'дато')
+  await t.say(12, '99')
+  await t.say(12, 'ой ребенку 12')
+  await t.say(12, '89061234567')
+  await t.tap(12, 'confirm:yes')
+  const lead = t.store.db.prepare('SELECT * FROM leads').get()
+  assert.ok(lead, 'заявка не сохранена: ' + t.texts().join(' | '))
+  assert.ok(!/ребенку|ой/.test(JSON.stringify(lead)), 'в заявке остались лишние слова: ' + JSON.stringify(lead))
+  assert.ok(/\b12\b/.test(JSON.stringify(lead)), 'возраст потерялся: ' + JSON.stringify(lead))
+  t.close()
+})
+
 test('запись на фестиваль: свои вопросы, заявка помнит направление и ответы', async () => {
   const t = rig()
   await t.say(20, 'запишите на фестиваль')

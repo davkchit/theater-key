@@ -72,6 +72,13 @@ const TONE: Record<
 // The title is huge, and a name in «…» does not break (the typograph glues
 // «Солнечная пыль» into one piece), so its size follows the longest piece:
 // «КВЕСТ» stays big, «СОЛНЕЧНАЯ ПЫЛЬ» shrinks to fit its column.
+// photo grid columns on a wide screen by how many photos there are
+const PHOTO_COLS: Record<number, string> = {
+  3: 'md:grid-cols-3',
+  4: 'md:grid-cols-4',
+  5: 'md:grid-cols-3 lg:grid-cols-5',
+}
+
 function titleSize(title: string): CSSProperties {
   const pieces = title.toUpperCase().match(/«[^»]{1,28}»|\S+/g) ?? [title]
   const longest = Math.max(...pieces.map((p) => p.length))
@@ -192,32 +199,38 @@ function EventPage({ d, page }: { d: Direction; page: DirectionPage }) {
       {/* about */}
       {(page.intro.length > 0 || page.facts.length > 0 || page.posters.length > 0) && (
         <section className={`${WRAP} pt-20 pb-16 md:pt-24`}>
-          <div className="grid gap-12 md:grid-cols-[1fr_auto] md:gap-16">
+          {/* text and the numbers on the left, the printed poster big on the
+              right: two half-empty text columns left a hole on a wide screen */}
+          <div
+            className={`grid gap-12 md:gap-16 ${page.posters.length > 0 ? 'lg:grid-cols-[minmax(0,1fr)_minmax(300px,440px)] xl:gap-24' : ''}`}
+          >
             <div>
               <h2 className={H2}>Подробнее</h2>
-              <div className="mt-7 grid gap-6 text-[17px] leading-[1.6] md:grid-cols-2 md:gap-10">
+              <div className="mt-8 max-w-[68ch] space-y-6 text-[18px] leading-[1.65] md:text-[19px]">
                 {page.intro.map((p, i) => (
                   <p key={i}>{p}</p>
                 ))}
               </div>
+              {page.facts.length > 0 && (
+                <dl className="border-ink mt-12 grid grid-cols-2 gap-x-8 gap-y-8 border-t-2 pt-8 sm:grid-cols-3">
+                  {page.facts.map((s) => (
+                    <div key={s.note}>
+                      <dt className="font-heading text-[48px] leading-none font-bold whitespace-nowrap md:text-[64px]">
+                        {s.big}
+                      </dt>
+                      <dd className="mt-2 text-[14px] tracking-[.04em] uppercase">{s.note}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </div>
-            {(page.facts.length > 0 || page.posters.length > 0) && (
-              <div className="md:border-ink md:max-w-[340px] md:border-l-2 md:pl-10">
-                {page.facts.length > 0 && (
-                  <dl className="flex flex-wrap gap-x-10 gap-y-6 md:flex-col">
-                    {page.facts.map((s) => (
-                      <div key={s.note}>
-                        <dt className="font-heading text-[56px] leading-none font-bold md:text-[72px]">
-                          {s.big}
-                        </dt>
-                        <dd className="mt-1 text-[14px] tracking-[.04em] uppercase">{s.note}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
+            {page.posters.length > 0 && (
+              <div>
                 {/* the printed posters, whole; a tap opens one full size */}
                 {page.posters.length > 0 && (
-                  <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-1">
+                  <div
+                    className={`grid gap-5 ${page.posters.length > 1 ? 'grid-cols-2 lg:grid-cols-1' : 'max-w-[440px]'}`}
+                  >
                     {page.posters.map((p) => (
                       <a
                         key={p}
@@ -320,11 +333,24 @@ function EventPage({ d, page }: { d: Direction; page: DirectionPage }) {
       {page.photos.length >= 3 && (
         <section className={`${WRAP} pt-20 pb-16`}>
           <SectionHead title="Фото" />
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 md:items-center lg:grid-cols-5">
+          {/* as many columns as photos, so three photos fill the width
+              instead of three small cards and an empty right half */}
+          <div
+            className={`grid grid-cols-2 gap-5 md:items-center md:gap-6 ${PHOTO_COLS[Math.min(page.photos.length, 5)]}`}
+          >
             {page.photos.slice(0, 5).map((p, i) => (
-              <RoughFrame key={p} className={i % 2 ? 'md:translate-y-4' : ''}>
-                <img src={p} alt="" loading="lazy" className="aspect-[3/4] w-full object-cover" />
-              </RoughFrame>
+              <a
+                key={p}
+                href={p}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Фото крупно"
+                className={`block ${i % 2 ? 'md:translate-y-5' : ''}`}
+              >
+                <RoughFrame>
+                  <img src={p} alt="" loading="lazy" className="aspect-[4/5] w-full object-cover" />
+                </RoughFrame>
+              </a>
             ))}
           </div>
         </section>
