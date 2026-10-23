@@ -13,12 +13,12 @@ import {
   H2,
   Ink,
   Portrait,
-  RoughFrame,
   SectionHead,
   WRAP,
   type Tone,
 } from '../components/home2/parts'
 import { Torn } from '../components/home2/paper'
+import { PageHero } from '../components/home2/PageHero'
 import { galleryPhoto } from '../components/home2/homeData'
 import { Modal } from '../components/ui/Modal'
 import { Reveal } from '../components/ui/Reveal'
@@ -26,7 +26,6 @@ import { scrollToId } from '../lib/scrollToId'
 import { SwallowIcon } from '../components/ui/SwallowIcon'
 import { SignupForm } from '../components/courses/SignupForm'
 import { DirectionForm } from '../components/directions/DirectionForm'
-import boyFence from '../../assets/el-boy-fence.svg'
 import starSvg from '../../assets/el-star.svg'
 import { HOURS, PHONE, telHref } from '../data/contacts'
 import { teachers } from '../data/people'
@@ -194,7 +193,11 @@ export default function CoursesPageV2() {
   const [direction, setDirection] = useState<Direction | null>(null)
   const [dirSent, setDirSent] = useState('')
   const [shake, setShake] = useState(0)
-  const more = visibleDirections().filter((d) => MORE_TYPES.includes(d.type))
+  // the festival comes last: it is for whole companies, and has its own page and form
+  const more = [
+    ...visibleDirections().filter((d) => MORE_TYPES.includes(d.type)),
+    ...visibleDirections().filter((d) => d.type === 'festival'),
+  ]
 
   const closeCourse = () => {
     setCourse(null)
@@ -209,48 +212,30 @@ export default function CoursesPageV2() {
     <div className="bg-paper relative overflow-x-clip">
       <PrintFilters />
 
-      {/* first screen on yellow */}
-      <section className="bg-brand-yellow relative">
-        <div
-          className={`${WRAP} grid items-center gap-10 py-14 md:grid-cols-[1fr_1.15fr] md:gap-14 md:py-20`}
-        >
-          <div className="relative">
-            <h1 className="font-heading text-[clamp(52px,7.4vw,112px)] leading-[.86] font-bold uppercase">
-              Записаться
-              <br />в театр
-            </h1>
-            <p className="mt-5 max-w-md text-[18px] md:text-[20px]">
-              Актёрские курсы для детей и взрослых. Набор продолжается.
-            </p>
-            <div className="mt-8 flex items-end gap-6">
-              <a
-                href="#zapis"
-                onClick={scrollToId('zapis')}
-                className={`${BTN} bg-ink text-paper px-9 py-4.5 text-[17px]`}
-              >
-                Записаться
-              </a>
-              <img
-                src={boyFence}
-                alt=""
-                aria-hidden="true"
-                className="hidden h-28 w-36 object-contain sm:block"
-              />
-            </div>
-          </div>
-          <Reveal>
-            <RoughFrame>
-              <img
-                src={galleryPhoto('spektakl-3')}
-                style={{ objectPosition: '50% 30%' }}
-                alt="Ученики театра на сцене"
-                className="aspect-[16/10] w-full object-cover"
-              />
-            </RoughFrame>
-          </Reveal>
+      {/* first screen: pupils on stage, the title on the dark side */}
+      <PageHero
+        photo={galleryPhoto('spektakl-3')}
+        focus="50% 30%"
+        alt="Ученики театра на сцене"
+        seed={171}
+      >
+        <h1 className="font-heading text-[clamp(52px,7.4vw,112px)] leading-[.86] font-bold uppercase">
+          Записаться
+          <br />в театр
+        </h1>
+        <p className="mt-5 max-w-md text-[18px] md:text-[20px]">
+          Актёрские курсы для детей и взрослых. Набор продолжается.
+        </p>
+        <div className="mt-8">
+          <a
+            href="#zapis"
+            onClick={scrollToId('zapis')}
+            className={`${BTN} bg-brand-yellow text-ink px-9 py-4.5 text-[17px]`}
+          >
+            Записаться
+          </a>
         </div>
-        <Torn color="text-brand-yellow" side="bottom" seed={171} />
-      </section>
+      </PageHero>
 
       {/* groups */}
       <section className={`${WRAP} pt-16 pb-16 md:pt-24`}>
@@ -342,7 +327,9 @@ export default function CoursesPageV2() {
               title={more.some((d) => d.open) ? 'Ещё можно записаться' : 'Ещё в театре'}
               dark
             />
-            <div className="grid gap-5 md:grid-cols-3">
+            <div
+              className={`grid gap-5 md:grid-cols-2 ${more.length === 4 ? 'xl:grid-cols-4' : 'lg:grid-cols-3'}`}
+            >
               {more.map((d) => (
                 <div
                   key={d.id}
@@ -364,7 +351,14 @@ export default function CoursesPageV2() {
                       {(d.prices ?? []).map((p) => `${p.name}: ${p.price}`).join(' · ')}
                     </div>
                   )}
-                  {d.open ? (
+                  {d.open && d.type === 'festival' ? (
+                    <Link
+                      to="/festival#zayavka"
+                      className={`${BTN} bg-ink text-paper mt-5 self-start py-3`}
+                    >
+                      Подать заявку
+                    </Link>
+                  ) : d.open ? (
                     <button
                       onClick={() => setDirection(d)}
                       className={`${BTN} bg-ink text-paper mt-5 self-start py-3`}
@@ -387,13 +381,23 @@ export default function CoursesPageV2() {
                       Приём заявок пока закрыт
                     </div>
                   )}
-                  {d.slug && d.page && (
+                  {d.type === 'festival' ? (
                     <Link
-                      to={'/' + d.slug}
+                      to="/festival"
                       className="mt-4 self-start text-[14px] font-semibold underline underline-offset-4"
                     >
-                      Подробнее о мероприятии →
+                      Подробнее о фестивале →
                     </Link>
+                  ) : (
+                    d.slug &&
+                    d.page && (
+                      <Link
+                        to={'/' + d.slug}
+                        className="mt-4 self-start text-[14px] font-semibold underline underline-offset-4"
+                      >
+                        Подробнее о мероприятии →
+                      </Link>
+                    )
                   )}
                 </div>
               ))}

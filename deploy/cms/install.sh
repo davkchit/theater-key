@@ -29,9 +29,17 @@ echo '== decap-server'
 install -m 755 -o root -g root "$HERE/rebuild.sh" /opt/kluch/cms/rebuild.sh
 install -m 755 -o root -g root "$HERE/kluch-site-publish" /usr/local/sbin/kluch-site-publish
 install -m 755 -o root -g root "$HERE/bileton-sync.sh" /opt/kluch/cms/bileton-sync.sh
-install -m 644 "$HERE/kluch-cms.service" "$HERE/kluch-rebuild.service" "$HERE/kluch-rebuild.path" "$HERE/kluch-bileton.service" "$HERE/kluch-bileton.timer" /etc/systemd/system/
+install -m 644 -o root -g root "$HERE/cms-guard.mjs" /opt/kluch/cms/cms-guard.mjs
+install -m 644 "$HERE/kluch-cms.service" "$HERE/kluch-cms-guard.service" "$HERE/kluch-rebuild.service" "$HERE/kluch-rebuild.path" "$HERE/kluch-bileton.service" "$HERE/kluch-bileton.timer" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now kluch-cms.service kluch-rebuild.path kluch-bileton.timer
+systemctl enable --now kluch-cms.service kluch-cms-guard.service kluch-rebuild.path kluch-bileton.timer
+
+echo '== ежедневная копия базы заявок'
+install -d -m 755 /opt/kluch/backup
+install -m 644 -o root -g root "$SRC/deploy/backup/kluch-backup.mjs" /opt/kluch/backup/kluch-backup.mjs
+install -m 644 "$SRC/deploy/backup/kluch-backup.service" "$SRC/deploy/backup/kluch-backup.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now kluch-backup.timer
 
 echo '== первая сборка'
 systemctl start kluch-rebuild.service

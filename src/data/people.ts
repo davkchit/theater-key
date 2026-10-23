@@ -16,6 +16,8 @@ export interface TeamEntry {
   zoom?: number
   homeCaption?: string
   teacherCaption?: string
+  /** the person's motto, shown in their card under the name */
+  quote?: string
   /** a few lines about the person, shown when their card is opened */
   bio?: string
   /** shows typed in by hand, on top of those where they are in «В ролях» */

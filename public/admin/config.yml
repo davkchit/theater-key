@@ -34,6 +34,7 @@ collections:
         fields:
           - label: Показы
             name: items
+            label_singular: показ
             widget: list
             summary: "{{fields.date | date('DD.MM.YYYY')}} · {{fields.time}} — {{fields.title}}"
             hint: 'Афиша заполняется с Билетона автоматически, каждый час: новые сеансы, переносы и отмены появляются здесь сами. Вручную ничего не добавляйте — будущие даты, которых нет на Билетоне, сайт уберёт. Чтобы спектакль попал в афишу, впишите ссылку на его виджет в «Репертуаре»'
@@ -61,6 +62,7 @@ collections:
         fields:
           - label: Спектакли
             name: shows
+            label_singular: спектакль
             widget: list
             summary: '{{title}}'
             fields:
@@ -95,6 +97,7 @@ collections:
                 field: { label: Фото, name: photo, widget: image }
               - label: В ролях
                 name: cast
+                label_singular: актёра
                 widget: list
                 required: false
                 summary: '{{fields.name}}'
@@ -121,6 +124,7 @@ collections:
         fields:
           - label: Курсы
             name: items
+            label_singular: курс
             widget: list
             summary: '{{name}} ({{ageRange}})'
             fields:
@@ -150,6 +154,7 @@ collections:
         fields:
           - label: Группы
             name: items
+            label_singular: группу
             widget: list
             summary: '{{title}}'
             fields:
@@ -181,6 +186,7 @@ collections:
         fields:
           - label: Направления
             name: items
+            label_singular: направление
             widget: list
             summary: '{{title}}'
             hint: 'Всё, на что можно оставить заявку, кроме курсов: подготовительные группы, фестиваль, квесты, карнавальные ночи, рассылка. Бот и сайт читают этот список.'
@@ -204,6 +210,7 @@ collections:
               - { label: Расписание или даты (словами), name: schedule, widget: string, required: false }
               - label: Цены
                 name: prices
+                label_singular: цену
                 widget: list
                 required: false
                 summary: '{{name}}: {{price}}'
@@ -307,6 +314,7 @@ collections:
         fields:
           - label: Люди
             name: members
+            label_singular: человека
             widget: list
             summary: '{{name}} — {{role}}'
             fields:
@@ -322,7 +330,8 @@ collections:
                   - { label: Синий, value: blue }
                   - { label: Чёрный, value: ink }
               - { label: Художественный руководитель (выделяется на странице), name: lead, widget: boolean, required: false, default: false }
-              - { label: О человеке, name: bio, widget: text, required: false, hint: 'Показывается, когда на сайте нажимают на карточку. Пара абзацев: что делает в театре, откуда пришёл, чем знаменит. Абзацы — с новой строки' }
+              - { label: Девиз, name: quote, widget: string, required: false, hint: 'Любимая фраза человека, в кавычках. Показывается под именем, когда на сайте нажимают на карточку' }
+              - { label: О человеке, name: bio, widget: text, required: false, hint: 'Показывается, когда на сайте нажимают на карточку. Каждый факт с новой строки: образование, что делает в театре, награды. Несколько строк станут списком, одна строка будет абзацем' }
               - { label: Спектакли, name: shows, widget: list, required: false, field: { label: Спектакль, name: show, widget: string }, hint: 'Необязательно: спектакли, где человек указан в «В ролях», добавятся сами. Здесь — прошлые постановки или то, чего нет в репертуаре' }
               - { label: Подпись на главной, name: homeCaption, widget: string, required: false, hint: 'Заполнено — человек показывается в блоке «Люди театра» на главной (первые четыре по порядку списка). Например: главный администратор' }
               - { label: Подпись в «Педагогах» на странице курсов, name: teacherCaption, widget: string, required: false, hint: 'Заполнено — человек показывается среди педагогов. Например: режиссёр-педагог' }
@@ -338,6 +347,7 @@ collections:
         fields:
           - label: Фотографии
             name: images
+            label_singular: фото
             widget: list
             summary: '{{src}}'
             fields:
@@ -359,6 +369,7 @@ collections:
         fields:
           - label: Разделы
             name: sections
+            label_singular: раздел
             widget: list
             summary: '{{fields.title}}'
             hint: 'Бот отвечает только по тому, что здесь и в других разделах админки (афиша, спектакли, курсы, фестиваль). Цены курсов, афишу, фестиваль, команду, адрес, телефоны, почту, соцсети и где продаются билеты сюда не пишите — бот берёт их оттуда (контакты — в «Настройках сайта»). Изменения доходят до бота минут через 10–15 после сохранения.'
@@ -394,6 +405,8 @@ collections:
           - { label: Отзывы в 2ГИС (ссылка), name: review2gis, widget: string, required: false, pattern: ['^$|^https://', 'Ссылка должна начинаться с https://'], hint: 'Страница театра в 2ГИС, вкладка «Отзывы». Если пусто — кнопки 2ГИС в блоке отзывов не будет' }
           - { label: Отзывы в Яндекс Картах (ссылка), name: reviewYandex, widget: string, required: false, pattern: ['^$|^https://', 'Ссылка должна начинаться с https://'], hint: 'Страница театра в Яндекс Картах, вкладка «Отзывы». Если обе ссылки пустые — блок отзывов не показывается' }
           - { label: Telegram-канал (ссылка), name: telegram, widget: string, required: false, pattern: ['^$|^https://', 'Ссылка должна начинаться с https://'], hint: 'Если пусто — значок не показывается' }
+          - { label: Max (ссылка), name: max, widget: string, required: false, pattern: ['^$|^https://', 'Ссылка должна начинаться с https://'], hint: 'Канал или чат театра в Max. Пока пусто, значок виден серым и никуда не ведёт' }
+          - { label: Instagram (ссылка), name: instagram, widget: string, required: false, pattern: ['^$|^https://', 'Ссылка должна начинаться с https://'], hint: 'Пока пусто, значок виден серым и никуда не ведёт' }
           - { label: Юридическое название, name: legalName, widget: string, required: false, hint: 'Как в уставе. Пишется в «Политике обработки персональных данных»' }
           - { label: ИНН, name: inn, widget: string, required: false, pattern: ['^$|^[0-9]{10}$', '10 цифр'], hint: 'Для «Политики обработки персональных данных». Если пусто — не показывается' }
           - { label: ОГРН, name: ogrn, widget: string, required: false, pattern: ['^$|^[0-9]{13}$', '13 цифр'], hint: 'Для «Политики обработки персональных данных». Если пусто — не показывается' }

@@ -1,0 +1,7 @@
+[Unit]
+Description=Kluch: daily copy of the bot's database (leads)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/node /opt/kluch/backup/kluch-backup.mjs /opt/kluch/data/kluch.sqlite /var/backups/kluch
+MemoryMax=150M

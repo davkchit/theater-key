@@ -1,0 +1,23 @@
+[Unit]
+Description=Kluch admin gate: lets the admin touch only src/content and public/uploads
+After=kluch-cms.service
+Wants=kluch-cms.service
+
+[Service]
+User=kluch-cms
+Group=kluch-cms
+# a copy outside the repository, so nothing saved from the admin can change it
+ExecStart=/usr/bin/node /opt/kluch/cms/cms-guard.mjs
+Environment=BIND_HOST=127.0.0.1
+Environment=PORT=8081
+Environment=UPSTREAM=http://127.0.0.1:8082
+Restart=always
+RestartSec=5
+MemoryMax=120M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

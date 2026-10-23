@@ -29,6 +29,11 @@ export function PersonModal({ person, block, shows, onClose }: PersonModalProps)
   useEscapeKey(open, onClose)
   useFocusTrap(cardRef, open)
   useLockBodyScroll(open)
+  // one fact per line in the admin; a leading dash typed out of habit is dropped
+  const bioLines = (person?.bio ?? '')
+    .split('\n')
+    .map((p) => p.replace(/^\s*[-–—•]\s*/, '').trim())
+    .filter(Boolean)
 
   return toBody(
     <AnimatePresence>
@@ -104,18 +109,29 @@ export function PersonModal({ person, block, shows, onClose }: PersonModalProps)
                   >
                     {person.name}
                   </h2>
+                  {person.quote?.trim() && (
+                    <p className="font-script text-brand-red mt-4 text-[24px] leading-[1.2] md:text-[30px]">
+                      {person.quote.trim()}
+                    </p>
+                  )}
                   {person.lead && (
                     <p className="mt-5 text-[17px] leading-[1.55] md:text-[19px]">{person.role}</p>
                   )}
-                  {person.bio?.trim() && (
-                    <div className="text-ink/85 mt-5 space-y-3 text-[16px] leading-[1.65] md:text-[17px]">
-                      {person.bio
-                        .split(/\n\s*\n|\n/)
-                        .filter((p) => p.trim())
-                        .map((p, i) => (
-                          <p key={i}>{p.trim()}</p>
-                        ))}
-                    </div>
+                  {bioLines.length > 1 ? (
+                    // a few facts, one per line in the admin: a list
+                    <ul className="text-ink/85 mt-5 space-y-2.5 text-[16px] leading-[1.5] md:text-[17px]">
+                      {bioLines.map((p, i) => (
+                        <li key={i} className="border-ink/15 border-t pt-2.5">
+                          {p}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    bioLines.length === 1 && (
+                      <p className="text-ink/85 mt-5 text-[16px] leading-[1.65] md:text-[17px]">
+                        {bioLines[0]}
+                      </p>
+                    )
                   )}
                   {shows.length > 0 && (
                     <p className="border-ink/20 mt-7 border-t pt-5 text-[15px] leading-[1.6] md:text-[16px]">

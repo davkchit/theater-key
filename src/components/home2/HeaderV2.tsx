@@ -25,7 +25,7 @@ export function HeaderV2() {
             <img src={logoKluch} alt="Театр «Ключ»" className="h-14 w-auto md:h-[72px]" />
           </Link>
 
-          <nav className="ml-auto hidden items-center gap-9 lg:flex">
+          <nav className="ml-auto hidden items-center gap-6 lg:flex xl:gap-9">
             {ITEMS.map((item) => (
               <NavLink
                 key={item.label}

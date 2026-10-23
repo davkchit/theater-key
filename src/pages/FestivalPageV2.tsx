@@ -2,21 +2,12 @@ import { useState } from 'react'
 import { directionByType } from '../data/directions'
 import { mediaUrl } from '../lib/mediaUrl'
 import festivalContent from '../content/festival.json'
-import {
-  PrintFilters,
-  BTN,
-  H2,
-  Ink,
-  RoughFrame,
-  SectionHead,
-  WRAP,
-} from '../components/home2/parts'
+import { PrintFilters, BTN, H2, RoughFrame, SectionHead, WRAP } from '../components/home2/parts'
 import { Torn } from '../components/home2/paper'
+import { PageHero } from '../components/home2/PageHero'
 import { galleryPhoto } from '../components/home2/homeData'
 import { FestivalSignupForm } from '../components/about/FestivalSignupForm'
-import { Reveal } from '../components/ui/Reveal'
 import { scrollToId } from '../lib/scrollToId'
-import starSvg from '../../assets/el-star.svg'
 import { CITY, PHONE, VENUE, telHref } from '../data/contacts'
 
 // The festival «Действующие лица»: what it is, how to apply, the programme,
@@ -79,73 +70,54 @@ export default function FestivalPageV2() {
     <div className="bg-paper relative overflow-x-clip">
       <PrintFilters />
 
-      {/* first screen on black, the festival's own emblem beside the title */}
-      <section className="bg-ink text-paper relative isolate">
-        <div
-          className={`${WRAP} relative z-[2] grid items-center gap-10 py-14 md:grid-cols-[1fr_1.05fr] md:gap-14 md:py-20`}
-        >
-          <div className="relative">
-            <img
-              src={FESTIVAL_LOGO}
-              alt="Эмблема фестиваля «Действующие лица»"
-              className="absolute right-0 bottom-0 h-20 w-20 md:right-2 md:bottom-2 md:h-36 md:w-36"
-            />
-            <div className="font-heading text-[15px] tracking-[.06em] uppercase md:text-[18px]">
-              Всероссийский театральный фестиваль
-            </div>
-            <h1 className="font-heading mt-3 text-[clamp(52px,8vw,120px)] leading-[.95] font-bold uppercase">
-              Действующие
-              <br />
-              лица
-            </h1>
-            {festival?.schedule && (
-              <p className="font-heading mt-6 text-[26px] font-semibold uppercase md:text-[34px]">
-                {festival.schedule}
-              </p>
-            )}
-            <p className="mt-2 text-[16px] md:text-[18px]">
-              {VENUE}, {CITY}
-            </p>
-            {open ? (
-              <a
-                href="#zayavka"
-                onClick={scrollToId('zayavka')}
-                className={`${BTN} bg-paper text-ink mt-8 px-9 py-4.5 text-[17px]`}
-              >
-                Подать заявку{' '}
-                <span aria-hidden="true" className="ml-2">
-                  →
-                </span>
-              </a>
-            ) : (
-              <p className="border-paper mt-8 inline-block border-2 px-5 py-3 text-[15px] font-semibold">
-                Приём заявок закрыт — следите за новостями
-              </p>
-            )}
-          </div>
-          <Reveal className="relative">
-            <RoughFrame>
-              {/* cropped to the people on stage: no audience heads in front */}
-              <div className="aspect-[16/10] w-full overflow-hidden">
-                {/* the stage is half empty black above them: zoom in on the people */}
-                <img
-                  src={galleryPhoto('nagrazhdenie-1')}
-                  alt="Награждение на фестивале «Действующие лица»"
-                  className="h-full w-full object-cover"
-                  style={{ transform: 'scale(1.5)', transformOrigin: '72% 70%' }}
-                />
-              </div>
-            </RoughFrame>
-            {/* the doodle above the photo's corner, clear of the emblem */}
-            <Ink
-              src={starSvg}
-              light
-              className="-top-16 -right-6 hidden h-20 w-20 rotate-12 md:block"
-            />
-          </Reveal>
+      {/* first screen: the award ceremony, the festival's own emblem beside the title */}
+      <PageHero
+        photo={galleryPhoto('nagrazhdenie-1')}
+        alt="Награждение на фестивале «Действующие лица»"
+        focus="72% 70%"
+        imgStyle={{ transform: 'scale(1.35)', transformOrigin: '72% 70%' }}
+        seed={201}
+      >
+        <div className="font-heading text-[15px] tracking-[.06em] uppercase md:text-[18px]">
+          Всероссийский театральный фестиваль
         </div>
-        <Torn color="text-ink" side="bottom" seed={201} />
-      </section>
+        <h1 className="font-heading mt-3 text-[clamp(52px,8vw,120px)] leading-[.95] font-bold uppercase">
+          Действующие
+          <br />
+          лица
+        </h1>
+        {festival?.schedule && (
+          <p className="font-heading mt-6 text-[26px] font-semibold uppercase md:text-[34px]">
+            {festival.schedule}
+          </p>
+        )}
+        <p className="mt-2 text-[16px] md:text-[18px]">
+          {VENUE}, {CITY}
+        </p>
+        <div className="mt-8 flex items-center gap-6 md:gap-8">
+          {open ? (
+            <a
+              href="#zayavka"
+              onClick={scrollToId('zayavka')}
+              className={`${BTN} bg-paper text-ink px-9 py-4.5 text-[17px]`}
+            >
+              Подать заявку{' '}
+              <span aria-hidden="true" className="ml-2">
+                →
+              </span>
+            </a>
+          ) : (
+            <p className="border-paper inline-block border-2 px-5 py-3 text-[15px] font-semibold">
+              Приём заявок закрыт — следите за новостями
+            </p>
+          )}
+          <img
+            src={FESTIVAL_LOGO}
+            alt="Эмблема фестиваля «Действующие лица»"
+            className="h-16 w-16 flex-shrink-0 md:h-24 md:w-24"
+          />
+        </div>
+      </PageHero>
 
       {/* about */}
       <section className={`${WRAP} pt-20 pb-16 md:pt-24`}>

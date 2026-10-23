@@ -4,7 +4,7 @@ import { courses } from '../data/courses'
 import { upcomingAfisha } from '../data/afisha'
 import { directionPages } from '../data/directions'
 import { ADDRESS, CITY, EMAIL, HOURS, PHONE, PHONE2, VENUE } from '../data/contacts'
-import { socials } from '../data/socials'
+import { profileLinks } from '../data/socials'
 
 // What search engines and link previews read about each page: the title, the
 // description under it in the results, the picture for a shared link, and a
@@ -48,7 +48,7 @@ function clip(text: string, max = 160): string {
 
 // the theatre as one card: name, address, point on the map, phones, hours, groups
 const [lat, lon] = (s.mapPoint ?? '').split(',').map((x) => Number(x.trim()))
-const sameAs = [...socials.map((l) => l.href), s.reviewYandex, s.review2gis]
+const sameAs = [...profileLinks, s.reviewYandex, s.review2gis]
   .filter((u): u is string => !!u)
   .map((u) => u.replace(/\/(tab\/)?reviews\/?$/, '/'))
 

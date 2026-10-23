@@ -13,6 +13,7 @@ import {
   WRAP,
 } from '../components/home2/parts'
 import { Torn } from '../components/home2/paper'
+import { PageHero } from '../components/home2/PageHero'
 import { PosterArt } from '../components/home2/ShowPoster'
 import { longDate } from '../components/home2/homeData'
 import { DirectionForm } from '../components/directions/DirectionForm'
@@ -32,12 +33,13 @@ import { VK_URL } from '../data/socials'
 
 const TONE: Record<
   DirectionPage['tone'],
-  { band: string; torn: string; btn: string; light: boolean; poster: number }
+  { band: string; torn: string; btn: string; heroBtn: string; light: boolean; poster: number }
 > = {
   red: {
     band: 'bg-brand-red text-paper',
     torn: 'text-brand-red',
     btn: 'bg-paper text-ink',
+    heroBtn: 'bg-brand-red text-paper',
     light: true,
     poster: 0,
   },
@@ -45,6 +47,7 @@ const TONE: Record<
     band: 'bg-brand-yellow text-ink',
     torn: 'text-brand-yellow',
     btn: 'bg-ink text-paper',
+    heroBtn: 'bg-brand-yellow text-ink',
     light: false,
     poster: 1,
   },
@@ -52,6 +55,7 @@ const TONE: Record<
     band: 'bg-brand-blue text-paper',
     torn: 'text-brand-blue',
     btn: 'bg-paper text-ink',
+    heroBtn: 'bg-brand-blue text-paper',
     light: true,
     poster: 2,
   },
@@ -59,6 +63,7 @@ const TONE: Record<
     band: 'bg-ink text-paper',
     torn: 'text-ink',
     btn: 'bg-brand-yellow text-ink',
+    heroBtn: 'bg-brand-yellow text-ink',
     light: true,
     poster: 3,
   },
@@ -101,85 +106,88 @@ function EventPage({ d, page }: { d: Direction; page: DirectionPage }) {
   const dates = upcomingAfisha.filter((a) => a.title.toLowerCase() === d.title.toLowerCase())
   const when = d.schedule || (dates[0] ? longDate(dates[0]) : '')
 
+  const intro = (btn: string) => (
+    <div>
+      {page.kicker && (
+        <div className="font-heading text-[15px] tracking-[.06em] uppercase md:text-[18px]">
+          {page.kicker}
+        </div>
+      )}
+      <h1
+        className="font-heading mt-3 text-(length:--title-m) leading-[.95] font-bold uppercase md:text-(length:--title-d)"
+        style={titleSize(d.title)}
+      >
+        {d.title}
+      </h1>
+      {when && (
+        <p className="font-heading mt-6 text-[24px] font-semibold uppercase md:text-[32px]">
+          {when}
+        </p>
+      )}
+      <p className="mt-2 text-[16px] md:text-[18px]">
+        {VENUE}, {CITY}
+      </p>
+      {open ? (
+        <a
+          href="#zapis"
+          onClick={scrollToId('zapis')}
+          className={`${BTN} ${btn} mt-8 px-9 py-4.5 text-[17px]`}
+        >
+          Записаться{' '}
+          <span aria-hidden="true" className="ml-2">
+            →
+          </span>
+        </a>
+      ) : (
+        <p className="mt-8 text-[16px] font-semibold md:text-[17px]">
+          Запись пока закрыта
+          {VK_URL && (
+            <>
+              {' — '}
+              <a
+                href="#zapis"
+                onClick={scrollToId('zapis')}
+                className="underline underline-offset-4"
+              >
+                узнать об открытии первыми
+              </a>
+            </>
+          )}
+        </p>
+      )}
+    </div>
+  )
+
   return (
     <div className="bg-paper relative overflow-x-clip">
       <PrintFilters />
 
-      {/* first screen in the event's colour */}
-      <section className={`${tone.band} relative isolate`}>
-        <div
-          className={`${WRAP} relative z-[2] grid items-center gap-10 py-14 md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] md:gap-14 md:py-20`}
-        >
-          <div>
-            {page.kicker && (
-              <div className="font-heading text-[15px] tracking-[.06em] uppercase md:text-[18px]">
-                {page.kicker}
-              </div>
-            )}
-            <h1
-              className="font-heading mt-3 text-(length:--title-m) leading-[.95] font-bold uppercase md:text-(length:--title-d)"
-              style={titleSize(d.title)}
-            >
-              {d.title}
-            </h1>
-            {when && (
-              <p className="font-heading mt-6 text-[24px] font-semibold uppercase md:text-[32px]">
-                {when}
-              </p>
-            )}
-            <p className="mt-2 text-[16px] md:text-[18px]">
-              {VENUE}, {CITY}
-            </p>
-            {open ? (
-              <a
-                href="#zapis"
-                onClick={scrollToId('zapis')}
-                className={`${BTN} ${tone.btn} mt-8 px-9 py-4.5 text-[17px]`}
-              >
-                Записаться{' '}
-                <span aria-hidden="true" className="ml-2">
-                  →
-                </span>
-              </a>
-            ) : (
-              <p className="mt-8 text-[16px] font-semibold md:text-[17px]">
-                Запись пока закрыта
-                {VK_URL && (
-                  <>
-                    {' — '}
-                    <a
-                      href="#zapis"
-                      onClick={scrollToId('zapis')}
-                      className="underline underline-offset-4"
-                    >
-                      узнать об открытии первыми
-                    </a>
-                  </>
-                )}
-              </p>
-            )}
-          </div>
-          <Reveal className="relative">
-            <RoughFrame>
-              {page.photo ? (
-                <img
-                  src={page.photo}
-                  alt={d.title}
-                  className="aspect-[16/10] w-full object-cover"
-                />
-              ) : (
+      {/* first screen: the event's photo across the screen, as on the homepage;
+          without a photo, a band in the event's colour with its poster art */}
+      {page.photo ? (
+        <PageHero photo={page.photo} alt={d.title} seed={401}>
+          {intro(tone.heroBtn)}
+        </PageHero>
+      ) : (
+        <section className={`${tone.band} relative isolate`}>
+          <div
+            className={`${WRAP} relative z-[2] grid items-center gap-10 py-14 md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] md:gap-14 md:py-20`}
+          >
+            {intro(tone.btn)}
+            <Reveal className="relative">
+              <RoughFrame>
                 <PosterArt photo="" n={tone.poster} className="aspect-[16/10]" />
-              )}
-            </RoughFrame>
-            <Ink
-              src={starSvg}
-              light={tone.light}
-              className="-bottom-24 -left-20 hidden h-20 w-20 -rotate-12 md:block"
-            />
-          </Reveal>
-        </div>
-        <Torn color={tone.torn} side="bottom" seed={401} />
-      </section>
+              </RoughFrame>
+              <Ink
+                src={starSvg}
+                light={tone.light}
+                className="-bottom-24 -left-20 hidden h-20 w-20 -rotate-12 md:block"
+              />
+            </Reveal>
+          </div>
+          <Torn color={tone.torn} side="bottom" seed={401} />
+        </section>
+      )}
 
       {/* about */}
       {(page.intro.length > 0 || page.facts.length > 0 || page.posters.length > 0) && (

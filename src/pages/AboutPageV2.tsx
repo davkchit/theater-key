@@ -8,14 +8,13 @@ import {
   Ink,
   MoreLink,
   Portrait,
-  RoughFrame,
   SectionHead,
   WRAP,
 } from '../components/home2/parts'
 import { Torn } from '../components/home2/paper'
+import { PageHero } from '../components/home2/PageHero'
 import { galleryPhoto } from '../components/home2/homeData'
 import { Reveal } from '../components/ui/Reveal'
-import { SwallowIcon } from '../components/ui/SwallowIcon'
 import starSvg from '../../assets/el-star.svg'
 import { directionPath } from '../data/directions'
 
@@ -77,53 +76,43 @@ export default function AboutPageV2() {
       <PrintFilters />
 
       {/* first screen */}
-      <section
-        className={`${WRAP} grid items-center gap-12 pt-14 pb-20 md:grid-cols-[1fr_1.1fr] md:gap-16 md:pt-20 md:pb-28`}
+      <PageHero
+        photo={galleryPhoto('posledstviy-5')}
+        focus="62% 30%"
+        alt="Актёры театра «Ключ» на сцене"
+        seed={113}
       >
-        <div>
-          <div className="font-heading text-[15px] tracking-[.08em] uppercase md:text-[17px]">
-            О театре
-          </div>
-          <h1 className="font-heading mt-3 text-[clamp(56px,9vw,132px)] leading-[.9] font-bold uppercase">
-            Театр
-            <br />
-            свободы
-          </h1>
-          <p className="font-heading text-brand-red mt-6 max-w-md text-[24px] leading-[1.15] font-semibold uppercase md:text-[28px]">
-            Нам нравится жить по правилам, которые мы сами придумываем.
-          </p>
-          <p className="mt-6 max-w-lg text-[17px] leading-[1.6] md:text-[18px]">
-            Молодёжный театр «Ключ» в Набережных Челнах с 2003 года. Театр для каждого свой. Для нас
-            он — территория полёта и жизни без границ.
-          </p>
+        <div className="font-heading text-[15px] tracking-[.08em] uppercase md:text-[17px]">
+          О театре
         </div>
-        <Reveal className="relative">
-          <RoughFrame>
-            <img
-              src={galleryPhoto('posledstviy-5')}
-              alt="Актёры театра «Ключ» на сцене"
-              className="aspect-[4/3] w-full object-cover"
-            />
-          </RoughFrame>
-          <SwallowIcon className="text-ink absolute -top-10 -left-6 h-14 -rotate-12 md:h-20" />
-        </Reveal>
-      </section>
+        <h1 className="font-heading mt-3 text-[clamp(56px,9vw,132px)] leading-[.9] font-bold uppercase">
+          Театр
+          <br />
+          свободы
+        </h1>
+        <p className="font-heading text-brand-yellow mt-6 max-w-md text-[24px] leading-[1.15] font-semibold uppercase md:text-[28px]">
+          Нам нравится жить по правилам, которые мы сами придумываем.
+        </p>
+        <p className="mt-6 max-w-lg text-[17px] leading-[1.6] md:text-[18px]">
+          Молодёжный театр «Ключ» в Набережных Челнах с 2003 года. Театр для каждого свой. Для нас
+          он — территория полёта и жизни без границ.
+        </p>
+      </PageHero>
 
       {/* quote */}
-      <section className="bg-ink text-paper relative">
-        <Torn color="text-ink" seed={241} />
+      {/* on paper: the first screen above is already black */}
+      <section className="relative">
         <div className={`${WRAP} relative py-16 md:py-24`}>
-          <Ink src={starSvg} light className="top-10 right-10 hidden h-24 w-24 md:block" />
+          <Ink src={starSvg} className="top-10 right-10 hidden h-24 w-24 md:block" />
           <blockquote className="max-w-5xl">
             <p className="font-heading text-[clamp(30px,4.6vw,64px)] leading-[1.05] font-medium uppercase">
               «Необходимо создавать места, где можно остановить время и там ждать отставшую душу»
             </p>
-            <footer className="text-paper/75 mt-6 text-[16px] md:text-[18px]">
+            <footer className="text-ink/75 mt-6 text-[16px] md:text-[18px]">
               Тонино Гуэрра — это о нашем театре
             </footer>
           </blockquote>
         </div>
-        <Torn color="text-ink" side="bottom" seed={247} />
       </section>
 
       {/* history */}
@@ -157,7 +146,10 @@ export default function AboutPageV2() {
           <SectionHead title="Театр в цифрах" dark />
           <dl className="grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-4">
             {[
-              [String(productions.length), plural(productions.length, 'постановка', 'постановки', 'постановок')],
+              [
+                String(productions.length),
+                plural(productions.length, 'постановка', 'постановки', 'постановок'),
+              ],
               ['5', 'стран гастролей'],
               [`${years}`, `${plural(years, 'год', 'года', 'лет')} театру`],
               ['с 2004', 'свой фестиваль'],

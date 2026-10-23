@@ -1,5 +1,5 @@
 [Unit]
-Description=Kluch site admin (decap-server, saves as git commits)
+Description=Kluch site admin (decap-server, saves as git commits; reached only through kluch-cms-guard)
 After=network-online.target
 
 [Service]
@@ -9,7 +9,7 @@ WorkingDirectory=/opt/kluch/cms
 Environment=MODE=git
 Environment=GIT_REPO_DIRECTORY=/opt/kluch/src
 Environment=BIND_HOST=127.0.0.1
-Environment=PORT=8081
+Environment=PORT=8082
 Environment=LOG_LEVEL=warn
 ExecStart=/usr/bin/node node_modules/decap-server/dist/index.js
 Restart=always

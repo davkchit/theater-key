@@ -90,7 +90,7 @@ export interface GalleryImage {
   span: GallerySpan
 }
 
-export type Social = 'VK' | 'TG' | 'YT'
+export type Social = 'VK' | 'TG' | 'YT' | 'MAX' | 'IG' | 'PHONE'
 
 /** One question of a direction's signup form, set in the admin. */
 export interface DirectionField {

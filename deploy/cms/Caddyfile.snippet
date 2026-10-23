@@ -3,12 +3,33 @@
 SITE {
     encode gzip
 
+    # the browser's own protections. No Content-Security-Policy on purpose:
+    # Bileton's window, Yandex Maps and Metrika load from many addresses, and a
+    # strict list would break them the day one of them changes
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    # fail2ban reads wrong admin passwords from here (deploy/server-hardening.sh)
+    log {
+        output file /var/log/caddy/kluch-access.log {
+            roll_size 10MiB
+            roll_keep 5
+        }
+        format json
+    }
+
     # the bot: chat on the site, forms
     handle /api/* {
         reverse_proxy 127.0.0.1:8787
     }
 
-    # the admin's saves -> decap-server (/admin/api/v1 -> /api/v1)
+    # the admin's saves -> cms-guard :8081 -> decap-server :8082 (/admin/api/v1 -> /api/v1)
     handle /admin/api/* {
         basic_auth {
             teatr HASH
