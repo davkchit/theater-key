@@ -23,6 +23,7 @@ import { Modal } from '../components/ui/Modal'
 import { Reveal } from '../components/ui/Reveal'
 import { scrollToId } from '../lib/scrollToId'
 import { mediaUrl } from '../lib/mediaUrl'
+import { openChat } from '../lib/openChat'
 import { EventCards } from '../components/home2/EventCards'
 import { usePersonModal } from '../components/team/usePersonModal'
 import { eventList } from '../data/directions'
@@ -394,6 +395,14 @@ export default function CoursesPageV2() {
               </div>
               <SwallowIcon className="text-ink h-14 -rotate-6" />
             </div>
+            <button
+              type="button"
+              onClick={openChat}
+              className="mt-5 text-left text-[16px] font-semibold underline underline-offset-4"
+            >
+              Или запишитесь через кота театра: подберёт группу по возрасту и всё оформит, даже
+              ночью →
+            </button>
           </div>
           <QuickSignup />
         </div>

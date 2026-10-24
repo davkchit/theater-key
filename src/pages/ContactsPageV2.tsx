@@ -3,6 +3,7 @@ import { PrintFilters, WRAP } from '../components/home2/parts'
 import { FindUs } from '../components/home2/Contact'
 import { SocialIcon } from '../components/ui/SocialIcon'
 import { EMAIL, HOURS, PHONE, PHONE2, telHref } from '../data/contacts'
+import { openChat } from '../lib/openChat'
 
 // «Контакты»: the three ways to reach the theatre side by side — call, write,
 // follow — then the map with the address and the routes.
@@ -33,6 +34,13 @@ export default function ContactsPageV2() {
               ))}
             </div>
             <p className="text-paper/80 mt-auto pt-4 text-[15px]">{HOURS}</p>
+            <button
+              type="button"
+              onClick={openChat}
+              className="text-brand-yellow mt-3 text-left text-[15px] font-semibold underline-offset-4 hover:underline"
+            >
+              Не дозвонились или уже поздно? Напишите коту театра: ответит сразу и запишет →
+            </button>
           </div>
           <div className={CARD}>
             <div className={KICKER}>Написать</div>

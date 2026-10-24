@@ -122,8 +122,10 @@ export function Torn({ color, side = 'top', seed = 1, rim = true }: TornProps) {
         }}
       />
       {/* the base where the paper joins its band, solid: on a 3x phone screen
-          the mask's soft bottom edge let the cream rim show as a thin line */}
-      <div className="torn-paper absolute inset-x-0 bottom-0 h-[4px] bg-current" />
+          the cream rim showed as a thin line along the bottom (WebKit draws the
+          rim's edge pixel, not the mask's), so this strip runs a little past
+          the paper into its band, which is the same colour */}
+      <div className="torn-paper absolute inset-x-0 -bottom-[3px] h-[7px] bg-current" />
     </div>
   )
 }
