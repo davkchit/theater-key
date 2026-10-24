@@ -58,7 +58,7 @@ export function Hero() {
       <div className="relative h-[calc(100svh-72px)] max-h-[1000px] min-h-[560px] overflow-hidden md:h-[calc(100svh-96px)]">
         {/* on a phone and a tablet the photo takes the top of the screen and the text sits
             under it, so the title never covers the faces */}
-        <div className="absolute inset-x-0 top-0 h-[62%] overflow-hidden lg:inset-y-0 lg:left-[38%] lg:h-auto xl:left-[30%]">
+        <div className="absolute inset-x-0 top-0 h-[50%] overflow-hidden lg:inset-y-0 lg:left-[38%] lg:h-auto xl:left-[30%]">
           <AnimatePresence initial={false}>
             <motion.img
               key={slide?.photo ?? 'stage'}
@@ -74,7 +74,7 @@ export function Hero() {
           </AnimatePresence>
         </div>
         {/* the text side is black, the actors' side stays alive */}
-        <div className="from-ink via-ink/50 to-ink/0 absolute inset-x-0 top-[22%] h-[40%] bg-gradient-to-t lg:hidden" />
+        <div className="from-ink via-ink/50 to-ink/0 absolute inset-x-0 top-[22%] h-[28%] bg-gradient-to-t lg:hidden" />
         {/* the photo fades into black on its left, so faces never sit under the title */}
         <InkFade
           side="left"

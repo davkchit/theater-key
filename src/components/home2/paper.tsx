@@ -121,6 +121,9 @@ export function Torn({ color, side = 'top', seed = 1, rim = true }: TornProps) {
           WebkitMaskRepeat: 'no-repeat',
         }}
       />
+      {/* the base where the paper joins its band, solid: on a 3x phone screen
+          the mask's soft bottom edge let the cream rim show as a thin line */}
+      <div className="torn-paper absolute inset-x-0 bottom-0 h-[4px] bg-current" />
     </div>
   )
 }

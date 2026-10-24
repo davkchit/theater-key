@@ -7,7 +7,7 @@ import { EMAIL, HOURS, PHONE, PHONE2, telHref } from '../data/contacts'
 // «Контакты»: the three ways to reach the theatre side by side — call, write,
 // follow — then the map with the address and the routes.
 
-const CARD = 'border-ink flex flex-col border-2 p-6 md:p-7'
+const CARD = 'border-ink flex min-w-0 flex-col border-2 p-6 md:p-7'
 const KICKER = 'text-ink/65 text-[14px] tracking-[.05em] uppercase'
 
 export default function ContactsPageV2() {
@@ -49,7 +49,7 @@ export default function ContactsPageV2() {
           {socials.length > 0 && (
             <div className={CARD}>
               <div className={KICKER}>Мы в соцсетях</div>
-              <div className="mt-3 flex gap-3">
+              <div className="mt-3 flex flex-wrap gap-3">
                 {socials.map((s) => (
                   <SocialIcon
                     key={s.key}

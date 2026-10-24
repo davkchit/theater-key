@@ -40,9 +40,12 @@ export function PageHero({
 
   return (
     <section className="bg-ink text-paper relative isolate">
-      <div className="relative min-h-[min(92svh,700px)] overflow-hidden md:h-[min(76svh,760px)] md:min-h-[560px]">
+      {/* On a phone and a tablet the photo is a block of its own at the top and
+          the text follows under it, so a long title never lands on a face; on
+          a computer the photo stands on the right and melts into black. */}
+      <div className="relative overflow-hidden md:h-[min(76svh,760px)] md:min-h-[560px]">
         <div
-          className={`absolute inset-x-0 top-0 h-[70%] overflow-hidden md:inset-y-0 md:right-0 md:h-auto ${small ? 'md:left-[46%]' : 'md:left-[32%]'}`}
+          className={`relative h-[50svh] min-h-[280px] overflow-hidden md:absolute md:inset-y-0 md:right-0 md:h-auto md:min-h-0 ${small ? 'md:left-[46%]' : 'md:left-[32%]'}`}
         >
           <img
             ref={img}
@@ -52,9 +55,9 @@ export function PageHero({
             className="h-full w-full object-cover"
             style={{ objectPosition: focus, ...imgStyle }}
           />
+          {/* the photo's lower part melts into the black the text stands on */}
+          <InkFade side="bottom" className="inset-x-0 bottom-0 h-1/2 md:hidden" />
         </div>
-        {/* on a phone the photo sits on top and melts into the black under the text */}
-        <div className="from-ink via-ink/60 to-ink/20 absolute inset-x-0 top-0 h-[70%] bg-gradient-to-t md:hidden" />
         <InkFade
           side="left"
           className={`inset-y-0 hidden md:block ${small ? 'left-[46%] w-[30%]' : 'left-[32%] w-[42%]'}`}
@@ -62,9 +65,9 @@ export function PageHero({
         <InkFade side="top" className="inset-x-0 top-0 h-20 md:h-28" />
         {/* the photo melts into the band's own grainy black before the torn
             edge, so no straight line shows where it ends */}
-        <InkFade side="bottom" className="inset-x-0 bottom-0 h-40 md:h-56" />
+        <InkFade side="bottom" className="inset-x-0 bottom-0 hidden h-56 md:block" />
         <div
-          className={`${WRAP} relative z-[3] flex h-full min-h-[min(92svh,700px)] flex-col justify-end pt-40 pb-16 md:min-h-[560px] md:justify-center md:pt-0 md:pb-10`}
+          className={`${WRAP} relative z-[3] -mt-14 pb-16 md:mt-0 md:flex md:h-full md:flex-col md:justify-center md:pb-10`}
         >
           {/* the text keeps to the black side: a long title («Лаборатория «ЛСД»»)
               wraps instead of running over the faces on a square screen */}

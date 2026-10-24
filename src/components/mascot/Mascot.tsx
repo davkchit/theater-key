@@ -70,7 +70,7 @@ export function Mascot() {
             aria-label="Чат с котом театра"
             // phones: the whole screen, like a messenger; larger screens: a
             // window in the corner above the cat
-            className="sm:border-ink fixed inset-0 z-70 sm:inset-auto sm:right-6 sm:bottom-30 sm:h-[min(620px,calc(100dvh-9rem))] sm:w-[390px] sm:overflow-hidden sm:rounded-[16px] sm:border-2 sm:shadow-[0_18px_44px_rgba(0,0,0,.35)]"
+            className="sm:border-ink fixed inset-0 z-70 sm:inset-auto sm:right-6 sm:bottom-30 sm:h-[min(620px,calc(100dvh-9rem))] sm:w-[390px] sm:overflow-hidden sm:rounded-[16px] sm:border-2 sm:shadow-[0_18px_44px_rgba(0,0,0,.35)] lg:h-[min(740px,calc(100dvh-14.5rem))] lg:w-[460px]"
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -82,8 +82,7 @@ export function Mascot() {
       </AnimatePresence>
 
       <motion.div
-        // the puppet stands on the bottom edge of the screen, its red curtain
-        // like the edge of a puppet-theatre booth
+        // the puppet peeks up from the bottom edge of the screen
         className={['fixed bottom-0 z-60', open ? 'max-sm:hidden' : ''].join(' ')}
         initial={false}
         animate={{ right }}

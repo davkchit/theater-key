@@ -5,9 +5,9 @@ import blinkImg from '../../../assets/puppet/head-blink.webp'
 import bodyImg from '../../../assets/puppet/body.webp'
 import pawImg from '../../../assets/puppet/paw-wave.webp'
 import tailImg from '../../../assets/puppet/tail.webp'
-import curtainImg from '../../../assets/puppet/curtain.webp'
 
-// The theatre's cat as a glove puppet above a booth curtain, assembled from
+// The theatre's cat as a glove puppet peeking up from the bottom edge of the
+// screen (the booth curtain it stood behind covered the page too much), assembled from
 // separate parts so it can move like one: the whole puppet sways a little as
 // if on a hand, the head tilts, the tail swings, it blinks now and then and
 // waves when you point at it (and sometimes on its own). With reduced motion
@@ -77,8 +77,10 @@ export function Puppet({ hover = false }: { hover?: boolean }) {
   }, [hover])
 
   return (
-    <div className="relative w-full" style={{ aspectRatio: `1254 / ${STAGE_H}` }}>
-      {/* peeks out from behind the curtain, then sways as if on a hand */}
+    // the lower fifth, where the curtain hung, stays below the screen edge:
+    // the edge itself hides the hand inside the puppet
+    <div className="relative w-full translate-y-[20%]" style={{ aspectRatio: `1254 / ${STAGE_H}` }}>
+      {/* peeks out from below the edge, then sways as if on a hand */}
       <motion.div
         className="absolute inset-0"
         style={{ transformOrigin: '50% 100%' }}
@@ -132,7 +134,6 @@ export function Puppet({ hover = false }: { hover?: boolean }) {
           />
         </motion.div>
       </motion.div>
-      <img src={curtainImg} alt="" draggable={false} style={at(0, 1030, 1254)} />
     </div>
   )
 }

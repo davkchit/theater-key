@@ -118,11 +118,13 @@ export function EventCards({
                   {[d.age, d.schedule].filter(Boolean).join(' | ')}
                 </div>
               )}
-              {d.desc && (
-                <p className="mt-3 line-clamp-4 flex-1 text-[15px] leading-[1.5] opacity-85">
-                  {d.desc}
-                </p>
-              )}
+              {/* the clamp on the text itself, the stretch on a box around it: a
+                  stretched clamped paragraph showed its «…» and then the rest */}
+              <div className="flex-1">
+                {d.desc && (
+                  <p className="mt-3 line-clamp-4 text-[15px] leading-[1.5] opacity-85">{d.desc}</p>
+                )}
+              </div>
               <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
                 {d.open && d.type === 'festival' ? (
                   <Link

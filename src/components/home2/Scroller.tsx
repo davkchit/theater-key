@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 // A row of cards that scrolls sideways once there are more than fit: by
-// finger or trackpad, and with two arrows on a computer. While everything
+// finger or trackpad, and with two arrows on a computer. No scroll-behavior:
+// smooth on the row itself: with scroll snapping it stopped iPhones from
+// swiping it at all (the arrows ask for a smooth scroll on their own). While everything
 // fits, it is a plain row and the arrows do not show.
 
 export function Scroller({
@@ -57,7 +59,7 @@ export function Scroller({
         ref={row}
         role="region"
         aria-label={label}
-        className="-mx-4 flex snap-x snap-mandatory scroll-px-4 [scrollbar-width:none] gap-5 overflow-x-auto scroll-smooth px-4 pb-2 sm:-mx-6.5 sm:scroll-px-6.5 sm:px-6.5 lg:mx-0 lg:scroll-px-0 lg:px-0 [&::-webkit-scrollbar]:hidden"
+        className="no-scrollbar -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-5 overflow-x-auto px-4 pb-2 sm:-mx-6.5 sm:scroll-px-6.5 sm:px-6.5 lg:mx-0 lg:scroll-px-0 lg:px-0"
       >
         {children}
       </div>

@@ -183,7 +183,9 @@ test('ответ, упёршийся в лимит токенов, не уход
 
 test('закрытый квест: формы нет, отвечает модель', async () => {
   let asked = 0
-  const t = rig({ llm: async () => { asked++; return { choices: [{ message: { content: 'Приём заявок на квест пока закрыт.' } }] } } })
+  // the quest is closed here on purpose: in the admin it may be open or closed
+  const closed = { ...knowledge, directions: knowledge.directions.map((d) => (d.type === 'quest' ? { ...d, open: false } : d)) }
+  const t = rig({ know: closed, llm: async () => { asked++; return { choices: [{ message: { content: 'Приём заявок на квест пока закрыт.' } }] } } })
   await t.say(21, 'запишите на квест')
   assert.equal(asked, 1, 'модель должна была ответить')
   assert.ok(!/Согласен/.test(t.texts().join(' ')), 'форма открылась на закрытый квест')
