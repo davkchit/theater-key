@@ -49,7 +49,9 @@ export function NewsletterBand() {
 function MapFrame({ className = '' }: { className?: string }) {
   if (!MAP_EMBED) return null
   return (
-    <div className={`bg-ink/5 border-ink relative overflow-hidden border-2 ${className}`}>
+    <div
+      className={`bg-ink/5 border-ink relative overflow-hidden rounded-xl border-2 ${className}`}
+    >
       <iframe
         src={MAP_EMBED}
         title="Театр «Ключ» на карте"

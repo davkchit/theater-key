@@ -117,11 +117,17 @@ export default function TeamPageV2() {
                 />
               </button>
             </Reveal>
-            <Reveal index={1}>
+            {/* the name and the text open the story too, not only the photo and the link;
+                the «Подробнее» button below does the same from the keyboard */}
+            <Reveal
+              index={1}
+              className="group cursor-pointer"
+              onClick={() => openPerson(lead, 'bg-brand-red')}
+            >
               <div className="font-heading text-brand-red text-[16px] tracking-[.06em] uppercase md:text-[18px]">
                 Художественный руководитель
               </div>
-              <h2 className={`${H2} mt-3`}>{lead.name}</h2>
+              <h2 className={`${H2} mt-3 underline-offset-8 group-hover:underline`}>{lead.name}</h2>
               <p className="mt-5 text-[17px] leading-[1.6] md:text-[19px]">{lead.role}</p>
               <ul className="mt-7 space-y-3">
                 {awards
@@ -134,7 +140,10 @@ export default function TeamPageV2() {
               </ul>
               <button
                 type="button"
-                onClick={() => openPerson(lead, 'bg-brand-red')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openPerson(lead, 'bg-brand-red')
+                }}
                 className="font-heading border-ink hover:text-brand-red hover:border-brand-red mt-8 inline-flex items-center gap-2 border-b-2 pb-1 text-[16px] font-semibold tracking-[.04em] uppercase transition-colors"
               >
                 Подробнее <span aria-hidden="true">→</span>

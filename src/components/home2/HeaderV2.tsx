@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Burger } from '../layout/Burger'
 import { MobileMenu } from '../layout/MobileMenu'
 import { WRAP } from './parts'
@@ -7,6 +7,7 @@ import { HeaderEdge } from './paper'
 // the theatre's logo letters in cream (its black round melts into the menu), 3x for sharp screens
 import logoKluch from '../../../assets/logo-kluch-light.png'
 import { navItems } from '../../data/nav'
+import { directionPages } from '../../data/directions'
 
 // Menu of the approved mockup: wordmark, six sections, red "Купить билет",
 // the full width of the screen, with a torn bottom edge over the first screen.
@@ -14,8 +15,18 @@ import { navItems } from '../../data/nav'
 // the same list as the mobile menu (src/data/nav.ts)
 const ITEMS = navItems
 
+// Pages without a menu item of their own still light up their section: a
+// show's page is under «Спектакли», the quest or the camp under «Курсы»
+// (they are listed there, in «Ещё можно записаться»).
+const SECTION_OF: Record<string, (path: string) => boolean> = {
+  '/repertuar': (p) => p.startsWith('/spektakl/'),
+  '/kursy': (p) => directionPages().some((d) => d.type !== 'festival' && p === '/' + d.slug),
+}
+const inSection = (to: string, path: string) => SECTION_OF[to]?.(path) ?? false
+
 export function HeaderV2() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const { pathname } = useLocation()
   return (
     <>
       <header className="text-paper sticky top-0 z-40 bg-[#121212]">
@@ -30,7 +41,9 @@ export function HeaderV2() {
               <NavLink
                 key={item.label}
                 to={item.to}
-                className="font-heading hover:text-brand-yellow text-[17px] font-medium tracking-[.03em] uppercase transition-colors duration-200"
+                className={({ isActive }) =>
+                  `font-heading hover:text-brand-yellow text-[17px] font-medium tracking-[.03em] uppercase transition-colors duration-200 ${isActive || inSection(item.to, pathname) ? 'text-brand-yellow' : ''}`
+                }
               >
                 {item.label}
               </NavLink>

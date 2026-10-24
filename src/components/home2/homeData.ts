@@ -1,7 +1,6 @@
 import type { AfishaItem, Show } from '../../types/content'
 import { upcomingAfisha } from '../../data/afisha'
 import { shows } from '../../data/shows'
-import { gallery } from '../../data/gallery'
 import { mediaUrl } from '../../lib/mediaUrl'
 import settings from '../../content/settings.json'
 import home from '../../content/home.json'
@@ -81,9 +80,12 @@ export const heroShows: HomeShow[] = nearestPerShow
 /** "Ближайшие спектакли": four different shows, photo or not. */
 export const upcomingCards: HomeShow[] = nearestPerShow.slice(0, 4)
 
-/** A gallery photo by its file name, so a renamed or deleted photo only drops out. */
-export function galleryPhoto(name: string, fallback = 0): string {
-  return gallery.find((g) => g.src.includes(name))?.src ?? gallery[fallback]?.src ?? ''
+/** A photo from public/uploads/gallery by its file name («lager-1»). Straight
+ *  from the folder, not from the admin's «Галерея» list: that list is the
+ *  gallery's own, and taking a photo out of it must not empty the first screen
+ *  of «Курсы» or the festival. */
+export function galleryPhoto(name: string): string {
+  return mediaUrl('/uploads/gallery/' + name + '.jpg')
 }
 
 /** A show's own page in the new design. */

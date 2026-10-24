@@ -5,7 +5,6 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { Course, Direction } from '../types/content'
 import { courses } from '../data/courses'
-import { visibleDirections } from '../data/directions'
 import { submitLead } from '../data/leads'
 import {
   PrintFilters,
@@ -24,6 +23,9 @@ import { Modal } from '../components/ui/Modal'
 import { Reveal } from '../components/ui/Reveal'
 import { scrollToId } from '../lib/scrollToId'
 import { mediaUrl } from '../lib/mediaUrl'
+import { EventCards } from '../components/home2/EventCards'
+import { usePersonModal } from '../components/team/usePersonModal'
+import { eventList } from '../data/directions'
 import { SwallowIcon } from '../components/ui/SwallowIcon'
 import { SignupForm } from '../components/courses/SignupForm'
 import { DirectionForm } from '../components/directions/DirectionForm'
@@ -51,7 +53,6 @@ const GROUP_PHOTO: Record<string, string> = {
   'pervye-roli': 'simon-2',
   premiera: 'posledstviy-4',
 }
-const MORE_TYPES: Direction['type'][] = ['prep', 'quest', 'carnival', 'camp', 'other']
 
 const STEPS = [
   ['Этюды и игры', 'Учимся быть настоящими на сцене, раскрываем себя через игру и импровизацию.'],
@@ -194,11 +195,10 @@ export default function CoursesPageV2() {
   const [direction, setDirection] = useState<Direction | null>(null)
   const [dirSent, setDirSent] = useState('')
   const [shake, setShake] = useState(0)
-  // the festival comes last: it is for whole companies, and has its own page and form
-  const more = [
-    ...visibleDirections().filter((d) => MORE_TYPES.includes(d.type)),
-    ...visibleDirections().filter((d) => d.type === 'festival'),
-  ]
+  // a tap on a teacher opens their story, as on «Команда»
+  const person = usePersonModal()
+  // every event from «Направления», the festival last (components/home2/EventCards.tsx)
+  const more = eventList()
 
   const closeCourse = () => {
     setCourse(null)
@@ -328,81 +328,7 @@ export default function CoursesPageV2() {
               title={more.some((d) => d.open) ? 'Ещё можно записаться' : 'Ещё в театре'}
               dark
             />
-            <div
-              className={`grid gap-5 md:grid-cols-2 ${more.length === 4 ? 'xl:grid-cols-4' : 'lg:grid-cols-3'}`}
-            >
-              {more.map((d) => (
-                <div
-                  key={d.id}
-                  className={`flex flex-col p-6 ${d.open ? 'bg-paper text-ink' : 'bg-paper/15 text-paper/70'}`}
-                >
-                  <div className="font-heading text-[26px] leading-tight font-bold uppercase">
-                    {d.title}
-                  </div>
-                  {(d.age || d.schedule) && (
-                    <div className="mt-2 text-[15px]">
-                      {[d.age, d.schedule].filter(Boolean).join(' | ')}
-                    </div>
-                  )}
-                  {d.desc && (
-                    <p className="mt-3 flex-1 text-[15px] leading-[1.5] opacity-85">{d.desc}</p>
-                  )}
-                  {(d.prices ?? []).length > 0 && (
-                    <div className="mt-3 text-[15px] font-semibold">
-                      {(d.prices ?? []).map((p) => `${p.name}: ${p.price}`).join(' · ')}
-                    </div>
-                  )}
-                  {d.open && d.type === 'festival' ? (
-                    <Link
-                      to="/festival#zayavka"
-                      className={`${BTN} bg-ink text-paper mt-5 self-start py-3`}
-                    >
-                      Подать заявку
-                    </Link>
-                  ) : d.open ? (
-                    <button
-                      onClick={() => setDirection(d)}
-                      className={`${BTN} bg-ink text-paper mt-5 self-start py-3`}
-                    >
-                      Записаться
-                    </button>
-                  ) : (
-                    <div className="mt-5 flex items-center gap-2 text-[14px] font-semibold">
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-5 w-5"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        aria-hidden="true"
-                      >
-                        <rect x="5" y="11" width="14" height="10" rx="2" />
-                        <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-                      </svg>
-                      Приём заявок пока закрыт
-                    </div>
-                  )}
-                  {d.type === 'festival' ? (
-                    <Link
-                      to="/festival"
-                      className="mt-4 self-start text-[14px] font-semibold underline underline-offset-4"
-                    >
-                      Подробнее о фестивале →
-                    </Link>
-                  ) : (
-                    d.slug &&
-                    d.page && (
-                      <Link
-                        to={'/' + d.slug}
-                        className="mt-4 self-start text-[14px] font-semibold underline underline-offset-4"
-                      >
-                        Подробнее о мероприятии →
-                      </Link>
-                    )
-                  )}
-                </div>
-              ))}
-            </div>
+            <EventCards dark onSignUp={setDirection} />
           </div>
           <Torn color="text-ink" side="bottom" seed={187} />
         </section>
@@ -414,22 +340,31 @@ export default function CoursesPageV2() {
         <div className="grid gap-12 sm:grid-cols-3 sm:gap-8 lg:gap-10">
           {TEACHERS.map((t, i) => (
             <Reveal key={t.name} index={i}>
-              <Portrait
-                src={t.src}
-                alt={t.name}
-                focus={t.focus}
-                zoom={t.zoom}
-                block={t.block}
-                className="aspect-[4/5]"
-              />
-              <div className="font-heading mt-6 text-[24px] leading-tight font-bold uppercase xl:text-[28px]">
-                {t.name}
-              </div>
-              <div className="text-ink/75 mt-1 text-[15px]">{t.role}</div>
+              <button
+                type="button"
+                onClick={() => person.open(t.name, t.block)}
+                aria-label={`${t.name}: подробнее`}
+                className="group block w-full text-left"
+              >
+                <Portrait
+                  src={t.src}
+                  alt={t.name}
+                  focus={t.focus}
+                  zoom={t.zoom}
+                  block={t.block}
+                  className="aspect-[4/5]"
+                />
+                <div className="font-heading mt-6 text-[24px] leading-tight font-bold uppercase underline-offset-4 group-hover:underline xl:text-[28px]">
+                  {t.name}
+                </div>
+                <div className="text-ink/75 mt-1 text-[15px]">{t.role}</div>
+              </button>
             </Reveal>
           ))}
         </div>
       </section>
+
+      {person.modal}
 
       {/* short form: heading and phone on the left, the form card on the right */}
       <section id="zapis" className="bg-brand-yellow relative scroll-mt-24">

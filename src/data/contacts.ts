@@ -36,17 +36,15 @@ export const REVIEW_LINKS = [
   { key: '2gis' as const, label: '2ГИС', href: s.review2gis ?? '' },
 ].filter((l) => l.href)
 
-// The map in «Как нас найти»: Yandex's widget with the theatre's own card,
-// found by the organisation number in the Yandex review link, centred on
-// mapPoint. Routes: Yandex Maps and 2GIS, each from its own link.
+// The map in «Как нас найти»: Yandex's widget with a red pin on mapPoint.
+// Only the pin: with the theatre's card (oid=…) Yandex put ads for other
+// businesses under it. Routes: Yandex Maps and 2GIS, each from its own link.
 const gis = (s.review2gis ?? '').match(/2gis\.ru\/([a-z_]+)\/firm\/(\d+)/)
-const ya = (s.reviewYandex ?? '').match(/yandex\.ru\/maps\/org\/[^/]+\/(\d+)/)
 const [lat, lon] = (s.mapPoint ?? '').split(',').map((x) => Number(x.trim()))
 const point = Number.isFinite(lat) && Number.isFinite(lon)
 /** the embeddable map, '' when the point is missing */
 export const MAP_EMBED = point
-  ? `https://yandex.ru/map-widget/v1/?ll=${lon}%2C${lat}&z=16` +
-    (ya ? `&oid=${ya[1]}&ol=biz` : `&pt=${lon}%2C${lat}%2Cpm2rdl`)
+  ? `https://yandex.ru/map-widget/v1/?ll=${lon}%2C${lat}&z=16&pt=${lon}%2C${lat}%2Cpm2rdl`
   : ''
 /** "how to get there" in each map app; an empty one is left out */
 export const MAP_ROUTES = [

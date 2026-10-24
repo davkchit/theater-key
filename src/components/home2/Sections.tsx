@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { animate, useInView, useReducedMotion } from 'motion/react'
-import { directionByType, directionPath } from '../../data/directions'
+import { directionByType } from '../../data/directions'
 import coursesContent from '../../content/courses.json'
 import type { Course } from '../../types/content'
 import { mediaUrl } from '../../lib/mediaUrl'
 import { Modal } from '../ui/Modal'
 import { FestivalSignupForm } from '../about/FestivalSignupForm'
+import { EventCards } from './EventCards'
+import { usePersonModal } from '../team/usePersonModal'
 import { Reveal } from '../ui/Reveal'
 import { SwallowIcon } from '../ui/SwallowIcon'
 import { BTN, Ink, MoreLink, Portrait, RoughFrame, SectionHead, WRAP } from './parts'
@@ -114,12 +116,13 @@ export function UpcomingShows() {
                     className={POSTER_ASPECT}
                   />
                 </Link>
-                <h3 className="font-heading mt-5 min-h-[2em] max-w-[14ch] text-[28px] leading-[1.02] font-bold uppercase xl:text-[32px]">
+                <h3 className="font-heading mt-5 min-h-[2.04em] max-w-[14ch] text-[28px] leading-[1.02] font-bold uppercase xl:text-[32px]">
                   <Link to={showPath(h.item.title)} className="hover:underline">
                     {h.item.title}
                   </Link>
                 </h3>
-                <div className="mt-3 flex min-h-[32px] items-center justify-between gap-2 text-[16px] font-medium uppercase">
+                {/* date and button sit on one line across the row, whatever the titles do */}
+                <div className="mt-auto flex min-h-[32px] items-center justify-between gap-2 pt-3 text-[16px] font-medium uppercase">
                   <span>{shortDate(h.item)}</span>
                   {h.item.age && (
                     <span className="bg-brand-red font-heading text-paper rounded-[4px] px-2 py-1 text-[15px] font-semibold">
@@ -159,6 +162,7 @@ export function UpcomingShows() {
 /* ─────────────── courses ─────────────── */
 
 export function CoursesBand() {
+  const [open, setOpen] = useState<string | null>(null)
   return (
     <section className="bg-brand-yellow relative">
       <Torn color="text-brand-yellow" seed={37} />
@@ -187,19 +191,58 @@ export function CoursesBand() {
               className="-mt-4 hidden h-32 w-40 flex-shrink-0 object-contain sm:block"
             />
           </div>
+          {/* a tap opens a group: what it is, when, how much; one open at a time */}
           <ul className="divide-ink/60 border-ink/60 mt-7 divide-y border-b">
-            {courses.map((c) => (
-              <li key={c.key}>
-                <Link to="/kursy" className="group block py-3.5">
-                  <span className="font-heading block text-[24px] leading-tight font-bold uppercase group-hover:underline">
-                    {c.name}
-                  </span>
-                  <span className="text-[16px]">
-                    {c.ageRange} · {c.price.replace(' / мес', '/мес')}
-                  </span>
-                </Link>
-              </li>
-            ))}
+            {courses.map((c) => {
+              const isOpen = open === c.key
+              return (
+                <li key={c.key}>
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() => setOpen(isOpen ? null : c.key)}
+                    className="group flex w-full items-center justify-between gap-4 py-3.5 text-left"
+                  >
+                    <span>
+                      <span className="font-heading block text-[24px] leading-tight font-bold uppercase group-hover:underline">
+                        {c.name}
+                      </span>
+                      <span className="text-[16px]">
+                        {c.ageRange}, {c.price.replace(' / мес', '/мес')}
+                      </span>
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={`font-heading text-[30px] leading-none transition-transform duration-300 ${isOpen ? 'rotate-45' : ''}`}
+                    >
+                      +
+                    </span>
+                  </button>
+                  <div
+                    className={`grid transition-[grid-template-rows] duration-300 ease-out ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="pb-5 text-[16px] leading-[1.55]">
+                        <p>{c.desc}</p>
+                        {c.schedule && (
+                          <p className="mt-2 font-semibold">
+                            {c.schedule.replace(/\s*·\s*/g, ', ')}
+                          </p>
+                        )}
+                        {c.start && <p className="mt-1 opacity-80">{c.start}</p>}
+                        <Link
+                          to="/kursy"
+                          tabIndex={isOpen ? 0 : -1}
+                          className="mt-3 inline-block font-semibold underline underline-offset-4"
+                        >
+                          Подробнее о группе →
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
           <Link to="/kursy" className={`${BTN} bg-ink text-paper mt-7 w-full py-4.5 text-[16px]`}>
             Записаться на курс
@@ -308,6 +351,8 @@ export function PeopleSection() {
   const [params] = useSearchParams()
   const duo = params.get('p') === 'duo'
   const [lead, ...rest] = PEOPLE
+  // a tap on anyone opens their story, as on «Команда»
+  const person = usePersonModal()
   return (
     <section className="bg-paper relative">
       <Torn color="text-paper" seed={53} />
@@ -316,19 +361,26 @@ export function PeopleSection() {
         <div className="grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-[1.45fr_1fr_1fr_1fr] md:gap-x-8">
           {lead && (
             <Reveal className="col-span-2 md:col-span-1">
-              <Portrait
-                src={lead.src}
-                alt={lead.name}
-                focus={lead.focus}
-                zoom={lead.zoom}
-                block={lead.block}
-                duo={duo}
-                className="aspect-[1/1]"
-              />
-              <h3 className="font-heading mt-6 text-[26px] leading-tight font-bold uppercase xl:text-[30px]">
-                {lead.name}
-              </h3>
-              <p className="text-ink/80 mt-1 text-[16px]">{lead.role}</p>
+              <button
+                type="button"
+                onClick={() => person.open(lead.name, lead.block)}
+                aria-label={`${lead.name}: подробнее`}
+                className="group block w-full text-left"
+              >
+                <Portrait
+                  src={lead.src}
+                  alt={lead.name}
+                  focus={lead.focus}
+                  zoom={lead.zoom}
+                  block={lead.block}
+                  duo={duo}
+                  className="aspect-[1/1]"
+                />
+                <h3 className="font-heading mt-6 text-[26px] leading-tight font-bold uppercase underline-offset-4 group-hover:underline xl:text-[30px]">
+                  {lead.name}
+                </h3>
+                <p className="text-ink/80 mt-1 text-[16px]">{lead.role}</p>
+              </button>
             </Reveal>
           )}
           {rest.map((p, n) => (
@@ -337,19 +389,26 @@ export function PeopleSection() {
               index={n + 1}
               className={`md:pt-10 ${n === 2 ? 'col-span-2 mx-auto w-[calc(50%-10px)] md:col-span-1 md:mx-0 md:w-auto' : ''}`}
             >
-              <Portrait
-                src={p.src}
-                alt={p.name}
-                focus={p.focus}
-                zoom={p.zoom}
-                block={p.block}
-                duo={duo}
-                className="aspect-[5/6]"
-              />
-              <h3 className="font-heading mt-6 text-[21px] leading-tight font-bold uppercase xl:text-[24px]">
-                {p.name}
-              </h3>
-              <p className="text-ink/80 mt-1 text-[15px]">{p.role}</p>
+              <button
+                type="button"
+                onClick={() => person.open(p.name, p.block)}
+                aria-label={`${p.name}: подробнее`}
+                className="group block w-full text-left"
+              >
+                <Portrait
+                  src={p.src}
+                  alt={p.name}
+                  focus={p.focus}
+                  zoom={p.zoom}
+                  block={p.block}
+                  duo={duo}
+                  className="aspect-[5/6]"
+                />
+                <h3 className="font-heading mt-6 text-[21px] leading-tight font-bold uppercase underline-offset-4 group-hover:underline xl:text-[24px]">
+                  {p.name}
+                </h3>
+                <p className="text-ink/80 mt-1 text-[15px]">{p.role}</p>
+              </button>
             </Reveal>
           ))}
         </div>
@@ -357,36 +416,12 @@ export function PeopleSection() {
           <MoreLink to="/komanda">Вся команда</MoreLink>
         </div>
       </div>
+      {person.modal}
     </section>
   )
 }
 
 /* ─────────────── not only shows ─────────────── */
-
-// Live colour with a brand-colour block behind, like the people above.
-const MORE = [
-  {
-    title: 'Фестиваль «Действующие лица»',
-    note: 'всероссийский, с 2004 года',
-    photo: 'nagrazhdenie-1',
-    block: 'bg-brand-red',
-    to: '/festival',
-  },
-  {
-    title: 'Лаборатория «ЛСД»',
-    note: 'современная драматургия, с 2012 года',
-    photo: 'spektakl-1',
-    block: 'bg-brand-yellow',
-    to: directionPath('lab') ?? '/o-teatre',
-  },
-  {
-    title: 'Лагерь «Солнечная пыль»',
-    note: 'летний театральный лагерь',
-    photo: 'lager-1',
-    block: 'bg-brand-blue',
-    to: directionPath('camp') ?? '/o-teatre',
-  },
-]
 
 export function MoreThanShows() {
   return (
@@ -394,29 +429,11 @@ export function MoreThanShows() {
       <div className={`${WRAP} pb-12`}>
         <div className="border-ink/15 border-t pt-16 md:pt-24">
           <SectionHead title="Не только спектакли" />
-          <div className="grid gap-14 md:grid-cols-3 md:gap-10 xl:gap-14">
-            {MORE.map((m, n) => (
-              <Reveal key={m.title} index={n}>
-                <Portrait
-                  src={galleryPhoto(m.photo)}
-                  alt={m.title}
-                  block={m.block}
-                  focus="50% 45%"
-                  className="aspect-[4/3]"
-                />
-                <h3 className="font-heading mt-7 text-[28px] leading-[1.02] font-bold uppercase xl:text-[32px]">
-                  {m.title}
-                </h3>
-                <p className="text-ink/80 mt-3 text-[16px]">{m.note}</p>
-                <MoreLink to={m.to} className="mt-5">
-                  Подробнее
-                </MoreLink>
-              </Reveal>
-            ))}
-          </div>
+          {/* every event from «Направления», like «Курсы» and «О театре» */}
+          <EventCards />
         </div>
         <div className="relative h-14">
-          <SwallowIcon className="text-ink pointer-events-none absolute right-0 bottom-0 h-16 -rotate-12 md:h-20" />
+          <SwallowIcon className="text-ink pointer-events-none absolute bottom-0 left-0 h-16 -rotate-12 md:h-20" />
         </div>
       </div>
     </section>

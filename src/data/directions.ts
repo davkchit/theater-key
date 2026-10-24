@@ -121,3 +121,16 @@ export const DIRECTION_TYPE_LABEL: Record<Direction['type'], string> = {
 
 /** Events with a page of their own (/lager, /kvest…); the pages stay all year. */
 export const directionPages = (): Direction[] => all.filter((d) => d.slug && d.page && d.title)
+
+// Every event the theatre runs besides shows and courses, for «Ещё можно
+// записаться» on «Курсы» and «Не только спектакли» (components/home2/EventCards.tsx).
+const SKIP: Direction['type'][] = ['newsletter']
+
+/** the events in display order: the festival, for whole companies, last */
+export function eventList(): Direction[] {
+  const list = visibleDirections().filter((d) => !SKIP.includes(d.type))
+  return [
+    ...list.filter((d) => d.type !== 'festival'),
+    ...list.filter((d) => d.type === 'festival'),
+  ]
+}

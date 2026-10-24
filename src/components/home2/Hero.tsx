@@ -56,7 +56,9 @@ export function Hero() {
       aria-label="Ближайшие спектакли"
     >
       <div className="relative h-[calc(100svh-72px)] max-h-[1000px] min-h-[560px] overflow-hidden md:h-[calc(100svh-96px)]">
-        <div className="absolute inset-0 md:left-[30%]">
+        {/* on a phone and a tablet the photo takes the top of the screen and the text sits
+            under it, so the title never covers the faces */}
+        <div className="absolute inset-x-0 top-0 h-[62%] overflow-hidden lg:inset-y-0 lg:left-[38%] lg:h-auto xl:left-[30%]">
           <AnimatePresence initial={false}>
             <motion.img
               key={slide?.photo ?? 'stage'}
@@ -72,14 +74,17 @@ export function Hero() {
           </AnimatePresence>
         </div>
         {/* the text side is black, the actors' side stays alive */}
-        <div className="from-ink via-ink/60 to-ink/0 absolute inset-0 bg-gradient-to-t md:hidden" />
+        <div className="from-ink via-ink/50 to-ink/0 absolute inset-x-0 top-[22%] h-[40%] bg-gradient-to-t lg:hidden" />
         {/* the photo fades into black on its left, so faces never sit under the title */}
-        <InkFade side="left" className="inset-y-0 left-[30%] hidden w-[40%] md:block" />
+        <InkFade
+          side="left"
+          className="inset-y-0 left-[38%] hidden w-[36%] lg:block xl:left-[30%] xl:w-[40%]"
+        />
         <InkFade side="top" className="inset-x-0 top-0 h-24" />
         <div className="from-ink/80 absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t to-transparent" />
 
         <div
-          className={`${WRAP} relative z-[3] flex h-full flex-col justify-end pb-20 md:justify-center md:pb-10`}
+          className={`${WRAP} relative z-[3] flex h-full flex-col justify-end pb-20 lg:justify-center lg:pb-10`}
         >
           {slide ? (
             <>
@@ -104,7 +109,7 @@ export function Hero() {
                           '--L': Math.max(5, ...slide.item.title.split(/\s+/).map((w) => w.length)),
                         } as CSSProperties
                       }
-                      className="font-heading w-min text-[min(170px,calc(84vw/(var(--L)*0.56)))] leading-[.92] font-bold tracking-[-.01em] uppercase md:text-[min(170px,calc(min(44vw,700px)/(var(--L)*0.52)))]"
+                      className="font-heading w-min text-[min(170px,calc(84vw/(var(--L)*0.56)))] leading-[.92] font-bold tracking-[-.01em] uppercase lg:text-[min(170px,calc(min(44vw,700px)/(var(--L)*0.52)))]"
                     >
                       {slide.item.title}
                     </h2>

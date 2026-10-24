@@ -24,6 +24,9 @@ import NotFoundPageV2 from './NotFoundPageV2'
 import starSvg from '../../assets/el-star.svg'
 import { VkFollow } from '../components/home2/VkFollow'
 import { VK_URL } from '../data/socials'
+import { AnimatePresence } from 'motion/react'
+import { Lightbox } from '../components/home2/Gallery'
+import { Scroller } from '../components/home2/Scroller'
 
 // A seasonal event's page — the lab, the camp, the quest, the carnival night —
 // built like the festival's from what the admin holds under «Направления»:
@@ -74,9 +77,40 @@ const TONE: Record<
 // «КВЕСТ» stays big, «СОЛНЕЧНАЯ ПЫЛЬ» shrinks to fit its column.
 // photo grid columns on a wide screen by how many photos there are
 const PHOTO_COLS: Record<number, string> = {
-  3: 'md:grid-cols-3',
-  4: 'md:grid-cols-4',
-  5: 'md:grid-cols-3 lg:grid-cols-5',
+  1: 'max-w-[560px]',
+  2: 'grid-cols-2',
+  3: 'grid-cols-2 md:grid-cols-3',
+}
+
+/** One photo of an event in a torn frame; a tap opens the viewer. */
+function PhotoTile({
+  src,
+  n,
+  onOpen,
+  className = '',
+}: {
+  src: string
+  n: number
+  onOpen: () => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Открыть фото ${n + 1}`}
+      className={`group block text-left ${n % 2 ? 'md:translate-y-5' : ''} ${className}`}
+    >
+      <RoughFrame>
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        />
+      </RoughFrame>
+    </button>
+  )
 }
 
 function titleSize(title: string): CSSProperties {
@@ -107,6 +141,10 @@ function Arrow() {
 function EventPage({ d, page }: { d: Direction; page: DirectionPage }) {
   const [sent, setSent] = useState(false)
   const [, setShake] = useState(0)
+  // posters and photos open full screen; the list is whichever was tapped
+  const [viewer, setViewer] = useState<{ list: string[]; index: number } | null>(null)
+  const move = (dir: -1 | 1) =>
+    setViewer((v) => v && { ...v, index: (v.index + dir + v.list.length) % v.list.length })
   const open = canSignUp(d)
   const tone = TONE[page.tone]
   // the event's own dates from the afisha, e.g. the carnival night on 18 December
@@ -231,22 +269,22 @@ function EventPage({ d, page }: { d: Direction; page: DirectionPage }) {
                   <div
                     className={`grid gap-5 ${page.posters.length > 1 ? 'grid-cols-2 lg:grid-cols-1' : 'max-w-[440px]'}`}
                   >
-                    {page.posters.map((p) => (
-                      <a
+                    {page.posters.map((p, i) => (
+                      // pinned to the wall slightly askew, like a printed poster
+                      <button
                         key={p}
-                        href={p}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        type="button"
+                        onClick={() => setViewer({ list: page.posters, index: i })}
                         aria-label="Афиша крупно"
-                        className="block transition-transform hover:-translate-y-1"
+                        className={`block transition-transform duration-300 hover:-translate-y-1 hover:rotate-0 ${i % 2 ? 'rotate-[1.5deg]' : '-rotate-[1.5deg]'}`}
                       >
                         <img
                           src={p}
                           alt={`Афиша: ${d.title}`}
                           loading="lazy"
-                          className="w-full shadow-[0_10px_30px_rgba(0,0,0,.25)]"
+                          className="border-ink/10 w-full border shadow-[0_14px_34px_rgba(0,0,0,.28)]"
                         />
-                      </a>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -329,30 +367,37 @@ function EventPage({ d, page }: { d: Direction; page: DirectionPage }) {
         </section>
       )}
 
-      {/* photos */}
-      {page.photos.length >= 3 && (
+      {/* photos: up to three fill the width; more become a row that scrolls
+          sideways. A tap opens them full screen, one after another. */}
+      {page.photos.length > 0 && (
         <section className={`${WRAP} pt-20 pb-16`}>
           <SectionHead title="Фото" />
-          {/* as many columns as photos, so three photos fill the width
-              instead of three small cards and an empty right half */}
-          <div
-            className={`grid grid-cols-2 gap-5 md:items-center md:gap-6 ${PHOTO_COLS[Math.min(page.photos.length, 5)]}`}
-          >
-            {page.photos.slice(0, 5).map((p, i) => (
-              <a
-                key={p}
-                href={p}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Фото крупно"
-                className={`block ${i % 2 ? 'md:translate-y-5' : ''}`}
-              >
-                <RoughFrame>
-                  <img src={p} alt="" loading="lazy" className="aspect-[4/5] w-full object-cover" />
-                </RoughFrame>
-              </a>
-            ))}
-          </div>
+          {page.photos.length > 3 ? (
+            <Scroller label="Фото">
+              {page.photos.map((p, i) => (
+                <PhotoTile
+                  key={p}
+                  src={p}
+                  n={i}
+                  onOpen={() => setViewer({ list: page.photos, index: i })}
+                  className="w-[78%] flex-shrink-0 snap-start sm:w-[calc(50%-10px)] lg:w-[calc(33.333%-14px)]"
+                />
+              ))}
+            </Scroller>
+          ) : (
+            <div
+              className={`grid gap-5 md:items-center md:gap-6 ${PHOTO_COLS[page.photos.length]}`}
+            >
+              {page.photos.map((p, i) => (
+                <PhotoTile
+                  key={p}
+                  src={p}
+                  n={i}
+                  onOpen={() => setViewer({ list: page.photos, index: i })}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -424,6 +469,17 @@ function EventPage({ d, page }: { d: Direction; page: DirectionPage }) {
           </div>
         </div>
       </section>
+
+      <AnimatePresence>
+        {viewer && (
+          <Lightbox
+            index={viewer.index}
+            list={viewer.list}
+            onClose={() => setViewer(null)}
+            onMove={move}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

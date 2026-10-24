@@ -40,9 +40,9 @@ export function PageHero({
 
   return (
     <section className="bg-ink text-paper relative isolate">
-      <div className="relative min-h-[560px] overflow-hidden md:h-[min(76svh,760px)]">
+      <div className="relative min-h-[min(92svh,700px)] overflow-hidden md:h-[min(76svh,760px)] md:min-h-[560px]">
         <div
-          className={`absolute inset-x-0 top-0 h-[64%] overflow-hidden md:inset-y-0 md:right-0 md:h-auto ${small ? 'md:left-[46%]' : 'md:left-[32%]'}`}
+          className={`absolute inset-x-0 top-0 h-[70%] overflow-hidden md:inset-y-0 md:right-0 md:h-auto ${small ? 'md:left-[46%]' : 'md:left-[32%]'}`}
         >
           <img
             ref={img}
@@ -54,7 +54,7 @@ export function PageHero({
           />
         </div>
         {/* on a phone the photo sits on top and melts into the black under the text */}
-        <div className="from-ink via-ink/60 to-ink/20 absolute inset-x-0 top-0 h-[64%] bg-gradient-to-t md:hidden" />
+        <div className="from-ink via-ink/60 to-ink/20 absolute inset-x-0 top-0 h-[70%] bg-gradient-to-t md:hidden" />
         <InkFade
           side="left"
           className={`inset-y-0 hidden md:block ${small ? 'left-[46%] w-[30%]' : 'left-[32%] w-[42%]'}`}
@@ -64,9 +64,11 @@ export function PageHero({
             edge, so no straight line shows where it ends */}
         <InkFade side="bottom" className="inset-x-0 bottom-0 h-40 md:h-56" />
         <div
-          className={`${WRAP} relative z-[3] flex h-full min-h-[560px] flex-col justify-end pt-40 pb-16 md:justify-center md:pt-0 md:pb-10`}
+          className={`${WRAP} relative z-[3] flex h-full min-h-[min(92svh,700px)] flex-col justify-end pt-40 pb-16 md:min-h-[560px] md:justify-center md:pt-0 md:pb-10`}
         >
-          {children}
+          {/* the text keeps to the black side: a long title («Лаборатория «ЛСД»»)
+              wraps instead of running over the faces on a square screen */}
+          <div className="md:max-w-[44vw]">{children}</div>
         </div>
       </div>
       <Torn color="text-ink" side="bottom" seed={seed} />

@@ -2,22 +2,14 @@ import { Link } from 'react-router-dom'
 import { awards } from '../data/awards'
 import { productions } from '../data/productions'
 import { mediaUrl } from '../lib/mediaUrl'
-import {
-  PrintFilters,
-  BTN,
-  Ink,
-  MoreLink,
-  Portrait,
-  SectionHead,
-  WRAP,
-} from '../components/home2/parts'
+import { PrintFilters, BTN, Ink, SectionHead, WRAP } from '../components/home2/parts'
 import { Torn } from '../components/home2/paper'
 import { PageHero } from '../components/home2/PageHero'
 import { galleryPhoto, showPath } from '../components/home2/homeData'
 import { shows } from '../data/shows'
+import { EventCards } from '../components/home2/EventCards'
 import { Reveal } from '../components/ui/Reveal'
 import starSvg from '../../assets/el-star.svg'
-import { directionPath } from '../data/directions'
 
 // «О театре»: who we are, the history year by year, the numbers over the
 // building, what else the theatre does, awards and every production.
@@ -46,30 +38,6 @@ const GRADUATES: [string, string][] = [
 ]
 
 const inRepertoire = new Set(shows.map((s) => s.title))
-
-const DIRECTIONS = [
-  {
-    title: 'Фестиваль «Действующие лица»',
-    note: 'Всероссийский, с 2004 года. К нам приезжают театральные коллективы со всей России: показы, мастерские, обсуждения.',
-    photo: 'nagrazhdenie-1',
-    block: 'bg-brand-red',
-    to: '/festival',
-  },
-  {
-    title: 'Лаборатория «ЛСД»',
-    note: 'Молодые режиссёры вместе с актёрами «Ключа» за три дня готовят эскизы спектаклей и показывают их зрителям.',
-    photo: 'spektakl-1',
-    block: 'bg-brand-yellow',
-    to: directionPath('lab'),
-  },
-  {
-    title: 'Лагерь «Солнечная пыль»',
-    note: 'Каждое лето: занятия с педагогами, игры, экскурсии в другие театры и итоговая постановка для родителей.',
-    photo: 'lager-1',
-    block: 'bg-brand-blue',
-    to: directionPath('camp'),
-  },
-]
 
 export default function AboutPageV2() {
   const years = new Date().getFullYear() - 2003
@@ -112,7 +80,7 @@ export default function AboutPageV2() {
       {/* quote */}
       {/* on paper: the first screen above is already black */}
       <section className="relative">
-        <div className={`${WRAP} relative py-16 md:py-24`}>
+        <div className={`${WRAP} relative pt-16 pb-12 md:pt-24 md:pb-16`}>
           <Ink src={starSvg} className="top-10 right-10 hidden h-24 w-24 md:block" />
           <blockquote className="max-w-5xl">
             <p className="font-heading text-[clamp(30px,4.6vw,64px)] leading-[1.05] font-medium uppercase">
@@ -126,20 +94,22 @@ export default function AboutPageV2() {
       </section>
 
       {/* history */}
-      <section className={`${WRAP} pt-20 pb-16 md:pt-28`}>
-        <SectionHead title="История" />
-        <ol className="relative grid grid-cols-2 gap-x-5 gap-y-8 md:gap-x-8 md:gap-y-10 lg:grid-cols-4">
-          {HISTORY.map(([year, text], i) => (
-            <Reveal key={year} index={i % 4} className="border-ink border-t-2 pt-4">
-              <div className="font-heading text-[40px] leading-none font-bold md:text-[64px]">
-                {year}
-              </div>
-              <p className="mt-3 text-[14px] leading-[1.45] md:text-[16px] md:leading-[1.5]">
-                {text}
-              </p>
-            </Reveal>
-          ))}
-        </ol>
+      <section className={`${WRAP} pb-16`}>
+        <div className="border-ink/15 border-t pt-12 md:pt-16">
+          <SectionHead title="История" />
+          <ol className="relative grid grid-cols-2 gap-x-5 gap-y-8 md:gap-x-8 md:gap-y-10 lg:grid-cols-4">
+            {HISTORY.map(([year, text], i) => (
+              <Reveal key={year} index={i % 4} className="border-ink border-t-2 pt-4">
+                <div className="font-heading text-[40px] leading-none font-bold md:text-[64px]">
+                  {year}
+                </div>
+                <p className="mt-3 text-[14px] leading-[1.45] md:text-[16px] md:leading-[1.5]">
+                  {text}
+                </p>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
       </section>
 
       {/* numbers over the building */}
@@ -180,28 +150,8 @@ export default function AboutPageV2() {
       {/* what else we do */}
       <section className={`${WRAP} pt-20 pb-16 md:pt-28`}>
         <SectionHead title="Не только спектакли" />
-        <div className="grid gap-14 md:grid-cols-3 md:gap-10 xl:gap-14">
-          {DIRECTIONS.map((d, i) => (
-            <Reveal key={d.title} index={i}>
-              <Portrait
-                src={galleryPhoto(d.photo)}
-                alt={d.title}
-                block={d.block}
-                focus="50% 45%"
-                className="aspect-[4/3]"
-              />
-              <h3 className="font-heading mt-7 text-[28px] leading-[1.02] font-bold uppercase xl:text-[32px]">
-                {d.title}
-              </h3>
-              <p className="text-ink/80 mt-3 text-[16px] leading-[1.55]">{d.note}</p>
-              {d.to && (
-                <MoreLink to={d.to} className="mt-5">
-                  Подробнее
-                </MoreLink>
-              )}
-            </Reveal>
-          ))}
-        </div>
+        {/* the same list as «Ещё можно записаться» on «Курсы»: «Направления» in the admin */}
+        <EventCards />
       </section>
 
       {/* graduates and joint projects */}

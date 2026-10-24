@@ -197,11 +197,7 @@ function Featured({ item, first, dark }: { item?: AfishaItem; first: boolean; da
           to={showPath(featured.item.title)}
           className="mx-auto block w-[min(100%,380px)] -rotate-1 shadow-[0_20px_50px_rgba(0,0,0,.35)] transition-transform hover:rotate-0"
         >
-          <img
-            src={poster}
-            alt={`Афиша спектакля «${featured.item.title}»`}
-            className="w-full"
-          />
+          <img src={poster} alt={`Афиша спектакля «${featured.item.title}»`} className="w-full" />
         </Link>
       ) : (
         <RoughFrame>
@@ -302,8 +298,15 @@ export default function AfishaPageV2() {
   const items = upcomingAfisha.filter((i) => i.mon === month)
   const dark = theme === 'dark'
 
+  const [fading, setFading] = useState(false)
   const setTheme = (t: Theme) => {
-    setThemeState(t)
+    if (t === theme || fading) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) setThemeState(t)
+    else {
+      setFading(true)
+      setTimeout(() => setThemeState(t), 200)
+      setTimeout(() => setFading(false), 550)
+    }
     try {
       localStorage.setItem(THEME_KEY, t)
     } catch {
@@ -331,7 +334,7 @@ export default function AfishaPageV2() {
     <div className="bg-paper relative overflow-x-clip">
       <PrintFilters />
 
-      <section className={`${WRAP} relative pt-14 md:pt-20 ${dark ? 'pb-16' : 'pb-10'}`}>
+      <section className={`${WRAP} relative pt-14 pb-10 md:pt-20`}>
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <h1 className="font-heading text-[clamp(56px,10vw,140px)] leading-[.9] font-bold uppercase">
@@ -345,14 +348,25 @@ export default function AfishaPageV2() {
         </div>
       </section>
 
-      {dark ? (
-        <section className="bg-ink text-paper relative">
-          <Torn color="text-ink" seed={301} />
-          <div className={`${WRAP} py-14 md:py-16`}>{schedule}</div>
-        </section>
-      ) : (
-        <section className={`${WRAP} pb-16`}>{schedule}</section>
-      )}
+      {/* The dark look comes down over the paper like a curtain and goes back
+          up; the list itself dips out for a moment and comes back in the new
+          colours. Same spacing in both looks, so nothing on the page jumps. */}
+      <section className="relative">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 -top-[30px] bottom-0 transition-[clip-path] duration-[650ms] ease-[cubic-bezier(.65,0,.35,1)] motion-reduce:transition-none"
+          style={{ clipPath: dark ? 'inset(0 0 0 0)' : 'inset(0 0 100% 0)' }}
+        >
+          <div className="bg-ink absolute inset-x-0 top-[30px] bottom-0">
+            <Torn color="text-ink" seed={301} />
+          </div>
+        </div>
+        <div
+          className={`${WRAP} relative py-14 transition-opacity duration-200 md:py-16 ${dark ? 'text-paper' : 'text-ink'} ${fading ? 'opacity-0' : 'opacity-100'}`}
+        >
+          {schedule}
+        </div>
+      </section>
 
       <ReviewBand red />
 
