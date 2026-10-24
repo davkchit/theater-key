@@ -175,6 +175,10 @@ function smallTalkReply(text, nowMs) {
 
 const ABOUT_SIGNUP_Q = /(^|\s)(куда|кому|где|зачем|почему|откуда|кто|что|сколько|когда)(\s|$)|(^|\s)ли(\s|$)/i
 
+// A signup request that also asks something: a question mark, or the usual
+// ways of asking without one («скидка многодетным есть», «можно ли ещё на Симона»).
+const ASKS_TOO = /\?|можно ли|есть ли|бывают ли|сколько|скидк|льгот|когда|почему|зачем|а если/i
+
 function looksLikeQuestion(text) {
   return /\?/.test(text) || text.split(/\s+/).length > 6
 }
@@ -1564,7 +1568,23 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
     const act = parsed.wantsAction && intentAllowed(parsed.intent, s, nowMs)
     if (act && parsed.intent === 'cancel') { cancelLeadAsk(res.out, s); return res }
     if (act && parsed.intent === 'add_child') { s.pendingExtra = true; runSignupStart(res, s, nowMs, 'extra', knowledge); return res }
-    if (act && parsed.intent === 'signup') { s.pendingExtra = false; if (beginSignup(res, s, nowMs, knowledge, t, false)) return res }
+    if (act && parsed.intent === 'signup') {
+      s.pendingExtra = false
+      const before = res.out.length
+      if (beginSignup(res, s, nowMs, knowledge, t, false)) {
+        // «хотим на курс, и можно ли на Симона?», «скидка многодетным на курс?»:
+        // the form opened, and the question in the same message was dropped.
+        // The model answers it first, the form's first step follows, and the
+        // question rides along in the lead for the administrator.
+        if (ASKS_TOO.test(t)) {
+          const form = res.out.splice(before)
+          const last = form[form.length - 1]
+          if (s.draft) s.draft.questions = (s.draft.questions || []).concat([t.slice(0, 200)])
+          return requestModel(res, s, knowledge, nowMs, t, { reprompt: last ? last.text : null, repromptMarkup: last ? last.reply_markup : undefined, inSignup: true }, cfg.topics)
+        }
+        return res
+      }
+    }
     if (parsed.intent === 'complaint' || (parsed.intent === 'human' && parsed.wantsAction)) { humanRequest(res.out, res.effects, s); return res }
     // everything else is answered, with the button that matches what was asked
     const offer = parsed.intent === 'signup' || parsed.intent === 'add_child' ? (hasOpenLead(s, nowMs) ? 'extra' : 'signup') : null

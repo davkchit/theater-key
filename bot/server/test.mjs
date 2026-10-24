@@ -104,6 +104,30 @@ test('парсер: ответ разбирается, а его сбой не �
   t.close()
 })
 
+test('запись и вопрос в одном сообщении: сначала ответ, потом анкета, вопрос в заявке', async () => {
+  let answered = 0
+  const t = rig({
+    parser: true,
+    llm: async (body) => {
+      if (body.model === 'p') return { choices: [{ message: { content: JSON.stringify({ intent: 'signup', wants_action: true, topics: ['courses'], age: null, show: null }) } }] }
+      answered++
+      return { choices: [{ message: { content: 'Про скидки уточнит администратор, когда перезвонит.' } }] }
+    },
+  })
+  await t.say(31, 'хотим на курс, есть скидка многодетным?')
+  const all = t.texts()
+  assert.equal(answered, 1, 'вопрос остался без ответа: ' + all.join(' | '))
+  assert.ok(/Согласен/.test(all.join(' ')) || t.sent.some((s) => JSON.stringify(s.payload).includes('consent:yes')), 'анкета не открылась: ' + all.join(' | '))
+  await t.tap(31, 'consent:yes')
+  await t.say(31, 'Ольга')
+  await t.say(31, '9')
+  await t.say(31, '89061234567')
+  await t.tap(31, 'confirm:yes')
+  const lead = t.store.db.prepare('SELECT * FROM leads').get()
+  assert.ok(lead && /многодетн/.test(lead.questions), 'вопрос не дошёл до администратора: ' + JSON.stringify(lead))
+  t.close()
+})
+
 test('запись на курс до конца: заявка в базе, карточка админу, статус кнопкой', async () => {
   const t = rig()
   await t.say(10, 'запишите дочку, ей 7')
