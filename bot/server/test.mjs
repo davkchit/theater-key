@@ -16,7 +16,6 @@ import { createTurn } from './turn.mjs'
 import { createSiteApi } from './site.mjs'
 import { createMailer } from './mail.mjs'
 import { leadsCsv } from './csv.mjs'
-import { createOauth } from './oauth.mjs'
 import { createWebChat } from './webchat.mjs'
 
 const lib = loadBotLib()
@@ -33,12 +32,12 @@ const withDirections = {
 }
 let updateId = 1000
 
-function rig({ llm, parser = false, know = knowledge } = {}) {
+function rig({ llm, parser = false, know = knowledge, extraEnv = {} } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kluch-test-'))
   const store = openStore(dir)
   const sent = []
   const logs = []
-  const env = { ADMIN_CHAT_ID: ADMIN, BOT_PARSER: parser ? '1' : '0', LLM_MODEL: 'm', LLM_PARSER_MODEL: 'p' }
+  const env = { ADMIN_CHAT_ID: ADMIN, BOT_PARSER: parser ? '1' : '0', LLM_MODEL: 'm', LLM_PARSER_MODEL: 'p', ...extraEnv }
   const turn = createTurn({
     env, lib, store,
     getKnowledge: () => know,
@@ -84,6 +83,51 @@ test('модель недоступна: человек получает чес�
   const alert = t.sent.find((s) => s.payload && s.payload.chat_id === ADMIN)
   assert.ok(alert && /Модель не ответила/.test(alert.payload.text), 'нет сигнала админу')
   assert.ok(t.store.getChat(3), 'состояние не сохранено')
+  t.close()
+})
+
+test('модель недоступна: разработчику письмо, но не чаще раза в час', async () => {
+  const t = rig({ llm: async () => { throw new Error('нет денег на счёте') }, extraEnv: { DEV_EMAIL_TO: 'dev@test.ru', ADMIN_CHAT_ID: '' } })
+  await t.say(31, 'расскажи про спектакль Симон')
+  await t.say(32, 'а про Еву Кюн?')
+  const dev = t.store.db.prepare("SELECT * FROM outbox WHERE to_whom = 'dev'").all()
+  assert.equal(dev.length, 1, 'писем разработчику: ' + dev.length)
+  assert.ok(/Модель не ответила/.test(dev[0].text) && /нет денег/.test(dev[0].text), dev[0].text)
+  // without a Telegram admin chat nothing goes to Telegram at all
+  assert.ok(!t.sent.some((s) => s.payload && s.payload.chat_id === ''), 'ушло в пустой Telegram-чат')
+  t.close()
+})
+
+test('«не могу записать» убирается одной фразой, остальной ответ остаётся', async () => {
+  const t = rig({ llm: async () => ({ choices: [{ message: { content: 'Курсы идут по возрастным группам, занятия два раза в неделю. К сожалению, я не могу принять заявку здесь.' } }] }) })
+  await t.say(34, 'а что за курсы у вас?')
+  const all = t.texts().join('\n')
+  assert.ok(/два раза в неделю/.test(all), 'ответ на вопрос пропал: ' + all)
+  assert.ok(/Записать могу прямо здесь/.test(all), all)
+  assert.ok(!/не могу принять/.test(all), all)
+  assert.ok(!/нажмите/i.test(all), 'обещает кнопку: ' + all)
+  // about courses: the signup button comes with it
+  const buttons = t.sent.flatMap((s) => (s.payload.reply_markup && s.payload.reply_markup.inline_keyboard) || []).flat().map((b) => b.text)
+  assert.ok(buttons.some((b) => /Оформить заявку/.test(b)), buttons.join(', '))
+  t.close()
+})
+
+test('«не могу записать» про спектакль: фраза убрана, кнопки записи на курс нет', async () => {
+  const t = rig({ llm: async () => ({ choices: [{ message: { content: '«Симон» идёт в ноябре. Я не могу записать вас на спектакль.' } }] }) })
+  await t.say(35, 'когда идёт Симон?')
+  const all = t.texts().join('\n')
+  assert.ok(/идёт в ноябре/.test(all), all)
+  assert.ok(!/не могу записать/.test(all) && !/нажмите/i.test(all), all)
+  assert.ok(!/Записать могу/.test(all), 'звучит как запись на спектакль: ' + all)
+  const buttons = t.sent.flatMap((s) => (s.payload.reply_markup && s.payload.reply_markup.inline_keyboard) || []).flat().map((b) => b.text)
+  assert.ok(!buttons.some((b) => /заявк|Записаться/i.test(b)), 'кнопка записи под спектаклем: ' + buttons.join(', '))
+  t.close()
+})
+
+test('без DEV_EMAIL_TO письма разработчику не копятся', async () => {
+  const t = rig({ llm: async () => { throw new Error('лимит') } })
+  await t.say(33, 'расскажи про спектакль Симон')
+  assert.equal(t.store.db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE to_whom = 'dev'").get().n, 0)
   t.close()
 })
 
@@ -428,6 +472,24 @@ test('«курс или мероприятия»: без цели показыв
   t.close()
 })
 
+test('одно «или» не мешает: «хочу на лагерь, или это только летом?» открывает анкету лагеря', async () => {
+  const q = 'хочу на лагерь, или это только летом?'
+  const t = formRig({ [q]: ['signup', 'camp'] })
+  await t.say(53, q)
+  assert.ok(t.store.getChat(53).step, 'анкета не открылась: ' + t.last().text)
+  assert.ok(t.texts().some((x) => /Солнечная пыль/.test(x)), t.texts().join(' | '))
+  assert.equal(t.asked.length, 1, 'вопрос про лето не ушёл модели')
+  t.close()
+})
+
+test('«курс или лагерь?»: два варианта, показывается список, даже если разборщик выбрал курс', async () => {
+  const t = formRig({ 'запишите на курс или в лагерь': ['signup', 'course'] })
+  await t.say(54, 'запишите на курс или в лагерь')
+  assert.equal(t.store.getChat(54).step, null, 'открылась анкета: ' + t.last().text)
+  assert.match(t.last().text, /Записать могу сюда/)
+  t.close()
+})
+
 test('ответы на шаги анкеты читает код, разборщик на них не зовётся', async () => {
   const t = formRig({ 'запишите на курс': ['signup', 'course'] })
   await t.say(52, 'запишите на курс')
@@ -528,12 +590,38 @@ test('вопрос про спектакль: под ответом нет кн�
   const t = formRig({}, '«Ева Кюн» в репертуаре, но показов нет. Оставьте заявку в чате, администратор уточнит. 🎭')
   await t.say(60, 'а на ева кюн?')
   assert.ok(!t.lastData().some((d) => /^signup:/.test(d)), 'кнопка записи под ответом про спектакль: ' + JSON.stringify(t.lastData()))
-  // about the studio the same promise still brings the button
-  const t2 = formRig({}, 'Есть курс для подростков. Оставьте заявку в чате, администратор перезвонит.')
+  // about the studio the button comes from the parser's target, not the reply
+  const t2 = formRig({ 'а курсы для подростков есть?': ['answer', 'course'] }, 'Есть курс для подростков.')
   await t2.say(61, 'а курсы для подростков есть?')
   assert.ok(t2.lastData().includes('signup:start'), 'про курсы кнопка пропала')
   t.close()
   t2.close()
+})
+
+test('кнопку ставит разборщик: вопрос про лагерь даёт «Записаться: лагерь», обещание в ответе без цели кнопки не даёт', async () => {
+  const t = formRig({ 'а лагерь сколько стоит?': ['answer', 'camp'] }, 'Смена в лагере стоит как указано в данных.')
+  await t.say(65, 'а лагерь сколько стоит?')
+  assert.equal(JSON.stringify(t.lastData()), '["signup:dir:camp"]')
+  // the reply promises a form, the parser named nothing: no button, whatever the wording
+  const t2 = formRig({}, 'Оставьте заявку прямо здесь, в чате, форма откроется сразу.')
+  // «занятия» is what the old reply-reading rule (aboutCourses) put a button on
+  await t2.say(66, 'а занятия по выходным бывают?')
+  assert.ok(!t2.lastData().some((d) => /^signup:/.test(d)), JSON.stringify(t2.lastData()))
+  // a closed direction gets no button
+  const closed = { ...knowledge, directions: knowledge.directions.map((d) => (d.id === 'camp' ? { ...d, open: false } : d)) }
+  const t3 = rig({
+    parser: true,
+    know: closed,
+    llm: async (body) => body.model === 'p'
+      ? { choices: [{ message: { content: JSON.stringify({ action: 'answer', target: 'camp', topics: [], age: 0, show: '' }) } }] }
+      : { choices: [{ message: { content: 'Запись в лагерь сейчас закрыта.' } }] },
+  })
+  await t3.say(67, 'а в лагерь можно?')
+  const buttons = t3.sent.flatMap((s) => (s.payload.reply_markup && s.payload.reply_markup.inline_keyboard) || []).flat().map((b) => b.callback_data)
+  assert.ok(!buttons.some((d) => /^signup:/.test(d)), JSON.stringify(buttons))
+  t.close()
+  t2.close()
+  t3.close()
 })
 
 test('ответ про спектакль: ссылка Билетона последней строкой «Купить билет», пробелы обычные', async () => {
@@ -696,6 +784,28 @@ test('почта: письмо уходит, при сбое повторяет�
   t.close()
 })
 
+test('почта: письмо о заявке так и не ушло, разработчик об этом узнаёт', async () => {
+  const t = rig()
+  let clock = 1_000_000
+  const sentMail = []
+  const mailer = createMailer({
+    env: { SMTP_HOST: 'smtp.test', SMTP_USER: 'box@mail.ru', SMTP_PASS: 'x', LEADS_EMAIL_TO: 'admin@mail.ru', DEV_EMAIL_TO: 'dev@test.ru' },
+    store: t.store,
+    log: () => {},
+    now: () => clock,
+    // the theatre's mailbox rejects the letter, the developer's takes it
+    transportFor: () => ({ sendMail: async (m) => { if (m.to === 'admin@mail.ru') throw new Error('ящик не принимает'); sentMail.push(m) } }),
+  })
+  t.store.commit({ chats: [], leads: [], statuses: [], unanswered: [], mail: [{ at: 'x', to: 'leads', subject: 'Заявка: Курсы, Тест', text: 'т', html: '' }] })
+  for (let i = 0; i < 12; i++) { await mailer.flush(); clock += 2 * 3600e3 }
+  assert.equal(t.store.db.prepare("SELECT next_at FROM outbox WHERE to_whom = 'leads'").get().next_at, null, 'не сдался')
+  await mailer.flush()
+  assert.equal(sentMail.length, 1, 'разработчику ничего не ушло')
+  assert.equal(sentMail[0].to, 'dev@test.ru')
+  assert.ok(/так и не ушло/.test(sentMail[0].text) && /Заявка: Курсы, Тест/.test(sentMail[0].text), sentMail[0].text)
+  t.close()
+})
+
 test('выгрузка для Excel: BOM, точка с запятой, формулы обезврежены', async () => {
   const t = rig()
   t.store.commit({ chats: [], statuses: [], unanswered: [], leads: [{ lead_id: 'S1', created_at: '2026-09-20T10:00:00.000Z', updated_at: 'x', status: 'новая', status_by: '', chat_id: '', source: 'сайт', name: '=HACK()', phone: '+7 906 111-22-33', children: '', questions: 'а; б', nudges: '0', direction: 'Курсы', answers: 'Город: Казань' }] })
@@ -707,52 +817,6 @@ test('выгрузка для Excel: BOM, точка с запятой, форм
   assert.match(lines[1], /^20\.09\.2026 13:00;сайт;Курсы;'=HACK\(\);/)
   assert.match(lines[1], /"а; б"/)
   t.close()
-})
-
-// ---- admin login (Decap) through our own server
-function fakeRes() {
-  const r = { status: 0, headers: {}, body: '' }
-  r.writeHead = (st, h) => { r.status = st; r.headers = h || {} }
-  r.end = (b) => { r.body = b || '' }
-  return r
-}
-
-test('вход в админку: GitHub, проверка state, токен передаётся окну админки', async () => {
-  const none = createOauth({ env: {}, log: () => {} })
-  let res = fakeRes()
-  await none.handle({ url: '/api/oauth/auth' }, res, '/api/oauth/auth')
-  assert.equal(res.status, 503, 'без настроек должен честно сказать, что не настроено')
-
-  let exchanged = null
-  const oauth = createOauth({
-    env: { GITHUB_OAUTH_ID: 'cid', GITHUB_OAUTH_SECRET: 'sec' },
-    log: () => {},
-    fetchImpl: async (url, o) => { exchanged = JSON.parse(o.body); return { json: async () => ({ access_token: 'tok123' }) } },
-  })
-  res = fakeRes()
-  await oauth.handle({ url: '/api/oauth/auth' }, res, '/api/oauth/auth')
-  assert.equal(res.status, 302)
-  const loc = new URL(res.headers.Location)
-  assert.equal(loc.host, 'github.com')
-  assert.equal(loc.searchParams.get('client_id'), 'cid')
-  const state = loc.searchParams.get('state')
-  assert.ok(state && state.length >= 16)
-
-  res = fakeRes()
-  await oauth.handle({ url: '/api/oauth/callback?code=c1&state=wrong' }, res, '/api/oauth/callback')
-  assert.equal(res.status, 400, 'чужой state должен отклоняться')
-
-  res = fakeRes()
-  await oauth.handle({ url: '/api/oauth/callback?code=c1&state=' + state }, res, '/api/oauth/callback')
-  assert.equal(res.status, 200)
-  assert.equal(exchanged.client_secret, 'sec')
-  assert.equal(exchanged.code, 'c1')
-  assert.match(res.body, /authorization:github:success:/)
-  assert.match(res.body, /tok123/)
-
-  res = fakeRes()
-  await oauth.handle({ url: '/api/oauth/callback?code=c1&state=' + state }, res, '/api/oauth/callback')
-  assert.equal(res.status, 400, 'один и тот же state нельзя использовать дважды')
 })
 
 // ---- the chat window on the site
@@ -772,11 +836,36 @@ function webRig({ llm } = {}) {
     log: () => {},
     now: () => Date.UTC(2026, 8, 19, 10, 0) + (updateId += 1) * 1000,
   })
-  webchat = createWebChat({ turn, lane: (k, job) => job(), log: () => {} })
+  // its own clock: a message every 20 seconds, as a person types, so the
+  // 40-in-ten-minutes guard does not trip on a test sending sixty at once
+  let webNow = Date.UTC(2026, 8, 19, 10, 0)
+  webchat = createWebChat({ turn, lane: (k, job) => job(), log: () => {}, now: () => (webNow += 20e3) })
   const session = 'abcdefghijklmnop1234'
   const post = (body) => webchat.handle({ session, ...body }, '9.9.9.9')
-  return { store, telegram, post, session, close: () => { store.close(); fs.rmSync(dir, { recursive: true, force: true }) } }
+  return { store, telegram, post, session, webchat, close: () => { store.close(); fs.rmSync(dir, { recursive: true, force: true }) } }
 }
+
+test('чат на сайте: «↺» не обходит лимит, с одного адреса 60 ответов модели в день', async () => {
+  let calls = 0
+  const w = webRig({ llm: async () => { calls++; return { choices: [{ message: { content: 'Ответ.' } }] } } })
+  // a new session every time, as after the restart button
+  const webchatAsk = (wr, session, ip) => wr.webchat.handle({ session, text: 'расскажи про спектакль Симон' }, ip)
+  for (let i = 0; i < 60; i++) {
+    const r = await webchatAsk(w, 'sess' + String(i).padStart(14, '0'), '9.9.9.9')
+    assert.equal(r.status, 200, 'сработал предел сообщений, а не ответов модели: ' + JSON.stringify(r.body))
+  }
+  assert.equal(calls, 60)
+  const r = await webchatAsk(w, 'sessx0000000000001', '9.9.9.9')
+  assert.equal(calls, 60, 'модель вызвана сверх лимита')
+  assert.ok(r.body.messages.some((m) => /не унесу/.test(m.html)), JSON.stringify(r.body))
+  // the buttons still work for that address, and another address is not touched
+  const menu = await w.webchat.handle({ session: 'sessx0000000000002', text: '🎭 Афиша' }, '9.9.9.9')
+  assert.ok(menu.body.messages.length >= 1)
+  assert.equal(calls, 60)
+  await webchatAsk(w, 'sessy0000000000001', '8.8.8.8')
+  assert.equal(calls, 61, 'другой адрес тоже заблокирован')
+  w.close()
+})
 
 test('чат на сайте: приветствие без модели, кнопки меню как подсказки', async () => {
   const w = webRig()

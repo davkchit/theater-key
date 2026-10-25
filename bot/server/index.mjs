@@ -16,8 +16,8 @@
 //   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, LEADS_EMAIL_TO, DEV_EMAIL_TO   (see mail.mjs)
 //   ALLOWED_ORIGINS   sites allowed to post leads from a browser, comma-separated
 //   TRUST_PROXY=1     behind nginx/caddy: take the visitor's address from X-Forwarded-For
-//   BOT_POLL=0        do not read Telegram (HTTP only: tests, a second copy)
-//   GITHUB_OAUTH_ID, GITHUB_OAUTH_SECRET   admin login for Decap (see oauth.mjs)
+//   BOT_POLL=0        do not read Telegram (HTTP only); TELEGRAM_BOT_TOKEN is
+//                     then optional
 
 import fs from 'node:fs'
 import http from 'node:http'
@@ -28,14 +28,15 @@ import { openStore } from './store.mjs'
 import { createTelegram } from './telegram.mjs'
 import { createKnowledge } from './knowledge.mjs'
 import { createTurn } from './turn.mjs'
-import { createMailer, devLetter } from './mail.mjs'
+import { createMailer, devMail } from './mail.mjs'
 import { createSiteApi } from './site.mjs'
 import { leadsCsv } from './csv.mjs'
-import { createOauth } from './oauth.mjs'
 import { createWebChat } from './webchat.mjs'
 
-const env = { ...loadEnv(), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TELEGRAM|ADMIN|LLM|YANDEX|SITE_URL|BOT_|KNOWLEDGE|SMTP|LEADS|MAIL_|DEV_EMAIL|ALLOWED_ORIGINS|TRUST_PROXY|GITHUB_OAUTH)/.test(k))) }
-if (!env.TELEGRAM_BOT_TOKEN) { console.error('нет TELEGRAM_BOT_TOKEN: впишите его в .env.bot'); process.exit(1) }
+const env = { ...loadEnv(), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TELEGRAM|ADMIN|LLM|YANDEX|SITE_URL|BOT_|KNOWLEDGE|SMTP|LEADS|MAIL_|DEV_EMAIL|ALLOWED_ORIGINS|TRUST_PROXY)/.test(k))) }
+// the token is needed only to read Telegram; the site's chat and forms run
+// without it (BOT_POLL=0), and a cleaned-up settings file must not stop them
+if (!env.TELEGRAM_BOT_TOKEN && env.BOT_POLL !== '0') { console.error('нет TELEGRAM_BOT_TOKEN: впишите его в .env.bot или поставьте BOT_POLL=0 (без Telegram)'); process.exit(1) }
 
 const redact = redactor(env)
 const dataDir = path.resolve(env.BOT_DATA_DIR || path.join(repoRoot, 'bot/data'))
@@ -54,12 +55,15 @@ function log(...parts) {
 
 const lib = loadBotLib()
 const store = openStore(dataDir)
-const tg = createTelegram(env.TELEGRAM_BOT_TOKEN, redact, log)
+const tg = env.TELEGRAM_BOT_TOKEN
+  ? createTelegram(env.TELEGRAM_BOT_TOKEN, redact, log)
+  : { call: async () => ({ ok: false, description: 'Telegram не настроен' }), send: async () => false }
 
 // a problem the developer must hear about: into the admin chat when there is one
 async function alarm(text) {
   log('ВНИМАНИЕ:', text)
-  if (env.DEV_EMAIL_TO) { store.commit({ chats: [], leads: [], statuses: [], unanswered: [], mail: [{ at: new Date().toISOString(), ...devLetter(text) }] }); mailer.flush() }
+  const mail = devMail(store, env, text)
+  if (mail.length) { store.commit({ chats: [], leads: [], statuses: [], unanswered: [], mail }); mailer.flush() }
   if (env.ADMIN_CHAT_ID) await tg.send({ method: 'sendMessage', payload: lib.msg(env.ADMIN_CHAT_ID, '⚠️ Бот «Ключ»: ' + lib.esc(text)) })
 }
 
@@ -147,14 +151,22 @@ function readJson(req, limit = 16 * 1024) {
   })
 }
 
-const oauth = createOauth({ env, log })
-
 const ipOf = (req) => (env.TRUST_PROXY === '1' && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || '?'
 
 const server = http.createServer(async (req, res) => {
   const url = (req.url || '').split('?')[0]
   try {
     if (url === '/health') return reply(req, res, 200, { ok: true, knowledge: knowledge.info(), lanes: lanes.size, mail: mailer.enabled })
+    // The site was just rebuilt (kluch-site-publish): read its knowledge now,
+    // not up to ten minutes later, when a price changed in the admin was already
+    // on the site and the cat still named the old one. Not under /api, so Caddy
+    // does not pass it from outside, and only from this machine itself.
+    if (req.method === 'POST' && url === '/reload-knowledge') {
+      const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.headers['x-forwarded-for']
+      if (!local) return reply(req, res, 403, { ok: false })
+      await knowledge.refresh()
+      return reply(req, res, 200, { ok: true, knowledge: knowledge.info() })
+    }
     if (req.method === 'OPTIONS' && url.startsWith('/api/')) {
       const origin = req.headers.origin
       if (!allowedOrigin(req)) { res.writeHead(403); return res.end() }
@@ -178,7 +190,6 @@ const server = http.createServer(async (req, res) => {
       if (r.status === 200) mailer.flush()
       return reply(req, res, r.status, r.body)
     }
-    if (url.startsWith('/api/oauth/')) return oauth.handle(req, res, url)
     reply(req, res, 404, { ok: false })
   } catch (e) {
     log('ошибка запроса', url, e.stack || e.message)

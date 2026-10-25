@@ -11,7 +11,7 @@
 // `deps` are injected so the whole turn can be run in a test with a fake model
 // and a fake Telegram (bot/server/test.mjs).
 
-import { leadLetter } from './mail.mjs'
+import { devMail, leadLetter } from './mail.mjs'
 
 export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now = () => Date.now() }) {
   const ADMIN = env.ADMIN_CHAT_ID ? String(env.ADMIN_CHAT_ID) : ''
@@ -72,21 +72,25 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
         p.tg.push({ method: 'editMessageText', payload: { chat_id: e.adminChatId, message_id: e.adminMessageId, text: e.text, reply_markup: lib.adminLeadKeyboard(e.leadId) } })
       } else if (e.type === 'unanswered') {
         p.unanswered.push({ asked_at: e.at, chat_id: String(e.chatId), question: e.question })
-      } else if (e.type === 'devAlert' && ADMIN) {
-        p.tg.push({ method: 'sendMessage', payload: lib.msg(ADMIN, '⚠️ ' + lib.esc(e.text)) })
+      } else if (e.type === 'devAlert') {
+        p.mail.push(...devMail(store, env, e.text, now()))
+        if (ADMIN) p.tg.push({ method: 'sendMessage', payload: lib.msg(ADMIN, '⚠️ ' + lib.esc(e.text)) })
       }
     }
     return p
   }
 
-  async function handle(update) {
+  // meta.llmBlocked: no model for this turn (the visitor's daily share is used
+  // up, see webchat.mjs). The returned plan says how many answers the model gave.
+  async function handle(update, meta = {}) {
     const ev = lib.normalizeUpdate(update)
     if (ev.kind === 'ignore') return null
 
     const knowledge = getKnowledge()
     const saved = store.getChat(ev.chatId)
     let global = store.getKv('usage')
-    const cfg = { nowMs: now(), adminChatId: ADMIN, useParser }
+    const cfg = { nowMs: now(), adminChatId: ADMIN, useParser, llmBlocked: Boolean(meta.llmBlocked) }
+    let llmCalls = 0
 
     let res = lib.decide(ev, saved, global, knowledge, cfg)
     if (res.global) { global = res.global; store.putKv('usage', global) }
@@ -118,6 +122,7 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
     }
 
     if (res.model) {
+      llmCalls = 1
       try {
         const raw = await llm(
           {
@@ -151,6 +156,7 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
     const p = plan(res)
     store.commit(p)
     for (const item of p.tg) await send(item)
+    p.llmCalls = llmCalls
     return p
   }
 

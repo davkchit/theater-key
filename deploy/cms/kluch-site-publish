@@ -12,3 +12,6 @@ chmod -R a+rX /opt/kluch/site.new
 mv /opt/kluch/site.new /opt/kluch/site
 rm -rf /opt/kluch/site.old
 echo 'сайт обновлён'
+# the bot would read the new knowledge.json within ten minutes; tell it now.
+# A bot that is down, or an older one without this address, does not fail it
+curl -s -X POST --max-time 20 http://127.0.0.1:8787/reload-knowledge >/dev/null 2>&1 || true

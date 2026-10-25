@@ -105,29 +105,10 @@ sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
 
 ## 4. Вход в админку
 
-Админка сайта (`/admin`) сохраняет изменения в GitHub, и для входа нужен
-маленький обмен ключами на сервере. Он уже встроен в бота
-(`bot/server/oauth.mjs`), осталось зарегистрировать приложение в GitHub:
-
-1. GitHub → Settings → Developer settings → OAuth Apps → New OAuth App.
-   - Homepage URL: `https://123.45.67.89.sslip.io`
-   - Authorization callback URL: `https://123.45.67.89.sslip.io/api/oauth/callback`
-2. Client ID и сгенерированный секрет вписать в `.env.bot`:
-   `GITHUB_OAUTH_ID=...`, `GITHUB_OAUTH_SECRET=...`
-3. В `public/admin/config.yml`:
-   ```yaml
-   backend:
-     name: github
-     repo: davkchit/the-key-theater-site
-     branch: master
-     base_url: https://123.45.67.89.sslip.io
-     auth_endpoint: api/oauth/auth
-   ```
-4. Закоммитить и `./deploy.sh`.
-
-Правка в админке — это коммит в GitHub. Чтобы она появилась на сайте, на
-сервере нужен `./deploy.sh`. Сделать это автоматическим можно отдельно
-(GitHub Actions по SSH или проверка раз в несколько минут).
+Админка сайта (`/admin`) сохраняет изменения на этом же сервере, не в
+GitHub: вход по паролю Caddy, сохранение идёт коммитом в git на сервере, и
+сайт пересобирается сам. Как это устроено и как поставить: `deploy/cms/README.md`.
+Вход через GitHub (`oauth.mjs`) убран.
 
 ## 5. Бэкап
 

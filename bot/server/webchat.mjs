@@ -15,7 +15,13 @@
 // What the bot sends to the admin chat (lead cards) still goes to Telegram.
 
 const SESSION_RE = /^[a-z0-9]{16,40}$/
-const LIMITS = { perIpTenMin: 40, perIpDay: 300 }
+// modelPerIpDay: answers by the model to one address a day. The bot's own
+// per-chat limit counts a session, and a session is whatever the browser sends:
+// the chat's «↺» starts a new one, so one person could use up the whole bot's
+// daily limit (150) in under an hour and leave the cat silent for everyone.
+// Not lower than this: the theatre's Wi-Fi (the poster's QR in the lobby) and
+// a mobile operator put many people behind one address.
+const LIMITS = { perIpTenMin: 40, perIpDay: 300, modelPerIpDay: 60 }
 
 // Telegram-only wording, where a phone button exists
 const WEB_WORDING = [
@@ -61,6 +67,10 @@ function rateLimiter() {
 export function createWebChat({ turn, lane, log, now = () => Date.now() }) {
   const inbox = new Map() // chat id -> messages collected during its turn
   const allow = rateLimiter()
+  // address -> { day, n }: model answers given to it today (Moscow day). In
+  // memory only: a restart forgives everyone, which is fine.
+  const modelUse = new Map()
+  const usedToday = (ip, day) => { const u = modelUse.get(ip); return u && u.day === day ? u.n : 0 }
   let seq = 0
 
   // Where each outgoing item of a turn goes: the web chat's own messages are
@@ -99,10 +109,15 @@ export function createWebChat({ turn, lane, log, now = () => Date.now() }) {
 
     const chatId = 'w' + session
     const messages = []
+    const day = new Date(t + 3 * 3600e3).toISOString().slice(0, 10)
     await lane(chatId, async () => {
       inbox.set(chatId, messages)
       try {
-        await turn.handle(update(chatId, body))
+        const p = await turn.handle(update(chatId, body), { llmBlocked: usedToday(ip, day) >= LIMITS.modelPerIpDay })
+        if (p && p.llmCalls) {
+          modelUse.set(ip, { day, n: usedToday(ip, day) + p.llmCalls })
+          if (modelUse.size > 5000) modelUse.delete(modelUse.keys().next().value)
+        }
       } finally {
         inbox.delete(chatId)
       }

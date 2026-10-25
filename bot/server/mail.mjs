@@ -71,6 +71,21 @@ export function devLetter(text) {
   return { to: 'dev', subject: 'Бот «Ключ»: ' + String(text).slice(0, 60), text, html: '' }
 }
 
+// A technical alert for the developer's mailbox (DEV_EMAIL_TO), at most one an
+// hour: a model that is down for a day must send a handful of letters, not one
+// per visitor's message. Returns the outbox rows to commit (none when it is not
+// time yet or no address is set). Before this the alerts went to the Telegram
+// admin chat only, and with Telegram off nobody heard of a silent cat.
+const DEV_EVERY_MS = 60 * 60e3
+export function devMail(store, env, text, nowMs = Date.now()) {
+  if (!env.DEV_EMAIL_TO) return []
+  const last = store.getKv('devMailAt') || 0
+  if (nowMs - last < DEV_EVERY_MS) return []
+  store.putKv('devMailAt', nowMs)
+  const body = text + '\n\nПохожие сигналы в течение часа письмом не приходят, они есть в bot.log на сервере.'
+  return [{ at: new Date(nowMs).toISOString(), ...devLetter(body) }]
+}
+
 // ---- sending
 
 // `transportFor` is injectable so tests can run without a mail server.
@@ -103,6 +118,12 @@ export function createMailer({ env, store, log, transportFor = (t) => nodemailer
           const next = tries >= GIVE_UP_AFTER ? null : now() + RETRY_MS[Math.min(tries - 1, RETRY_MS.length - 1)]
           store.mailFailed(m.id, tries, next, String(e.message).slice(0, 300))
           log(next ? 'письмо не ушло, повторю:' : 'письмо так и не ушло, сдаюсь:', m.subject, '·', e.message)
+          // a letter about a lead that never left is a lead nobody calls back;
+          // the developer hears of it (if mail works at all for that address)
+          if (!next && m.to !== 'dev') {
+            const alert = devMail(store, env, 'Письмо так и не ушло после ' + tries + ' попыток: «' + m.subject + '». Ошибка: ' + String(e.message).slice(0, 200) + '. Заявка сохранена в базе бота.', now())
+            if (alert.length) store.commit({ chats: [], leads: [], statuses: [], unanswered: [], mail: alert })
+          }
         }
       }
     } finally {
