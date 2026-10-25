@@ -38,13 +38,17 @@ const EVAL_DIR = path.join(repoRoot, 'bot/eval')
 const RUNS_DIR = path.join(EVAL_DIR, 'runs')
 const spec = JSON.parse(fs.readFileSync(path.join(EVAL_DIR, 'cases.json'), 'utf8'))
 
-const plain = (h) => String(h).replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/[   ]/g, ' ')
+// a link keeps its address in the text, so cases can check where it leads
+const plain = (h) => String(h).replace(/<a href="([^"]*)">([^<]*)<\/a>/g, '$2 $1').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/[   ]/g, ' ')
 const rx = (s) => new RegExp(s, 'i')
 
 // The parser uses the OpenAI-compatible endpoint, because that is the only one
 // where response_format / json_schema is honoured.
 async function callParser(env, model, req) {
-  const r = await callModel(env, req.messages, { parser: true, schema: req.schema, maxTokens: 200, temperature: 0 })
+  // the same budget as the live bot (server/turn.mjs): gpt-oss thinks before it
+  // answers, and at 200 a long message left it nothing to answer with, so the
+  // eval was quietly testing the fallback instead of the parser
+  const r = await callModel(env, req.messages, { parser: true, schema: req.schema, maxTokens: 800, temperature: 0 })
   parserTokens += r.tokens
   parserPrice = r.price
   return loadLib().parseTurnReply(r.text, req.userText)
@@ -166,6 +170,7 @@ function checkCase(c, out, forbidden, allowedPrices) {
   for (const eff of e.effects || []) if (!out.effects.includes(eff)) problems.push(`нет эффекта ${eff}`)
   for (const eff of e.noEffects || []) if (out.effects.includes(eff)) problems.push(`лишний эффект ${eff}`)
   for (const b of e.buttons || []) if (!out.buttons.includes(b)) problems.push(`нет кнопки ${b}`)
+  for (const b of e.noButtons || []) if (out.buttons.includes(b)) problems.push(`лишняя кнопка ${b}`)
 
   return problems
 }

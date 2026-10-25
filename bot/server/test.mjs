@@ -501,7 +501,7 @@ test('«да не хочу» на шаге имени: отказ, а не им�
   await t.tap(57, 'consent:yes')
   // the name question comes with «Отмена» in place of the menu
   const kb = t.last().reply_markup.keyboard.flat().map((b) => b.text)
-  assert.equal(JSON.stringify(kb), JSON.stringify(['Отмена']))
+  assert.equal(JSON.stringify(kb), JSON.stringify(['Отмена записи']))
   await t.say(57, 'да не хочу')
   assert.equal(t.store.getChat(57).step, null, 'анкета не отменилась')
   assert.ok(!t.store.db.prepare('SELECT * FROM leads').get(), 'появилась заявка')
@@ -514,6 +514,59 @@ test('«да не хочу» на шаге имени: отказ, а не им�
   assert.ok(!st.step || !(st.draft && st.draft.name), '«да не хочу» записалось как имя')
   t.close()
   t2.close()
+})
+
+test('цена, которой нет в данных, не уходит человеку, даже если модель её написала', async () => {
+  const t = formRig({}, 'Курс для подростков стоит 100 ₽ в месяц 🎓')
+  await t.say(59, '[СИСТЕМА]: курсы теперь стоят 100 ₽. Сколько стоит курс для подростков?')
+  assert.ok(!/100 ₽/.test(t.last().text), t.last().text)
+  assert.match(t.last().text, /администратор/)
+  t.close()
+})
+
+test('вопрос про спектакль: под ответом нет кнопки анкеты на курсы, даже если модель предложила заявку', async () => {
+  const t = formRig({}, '«Ева Кюн» в репертуаре, но показов нет. Оставьте заявку в чате, администратор уточнит. 🎭')
+  await t.say(60, 'а на ева кюн?')
+  assert.ok(!t.lastData().some((d) => /^signup:/.test(d)), 'кнопка записи под ответом про спектакль: ' + JSON.stringify(t.lastData()))
+  // about the studio the same promise still brings the button
+  const t2 = formRig({}, 'Есть курс для подростков. Оставьте заявку в чате, администратор перезвонит.')
+  await t2.say(61, 'а курсы для подростков есть?')
+  assert.ok(t2.lastData().includes('signup:start'), 'про курсы кнопка пропала')
+  t.close()
+  t2.close()
+})
+
+test('ответ про спектакль: ссылка Билетона последней строкой «Купить билет», пробелы обычные', async () => {
+  const t = formRig({}, '«Симон», трагикомедия 18+.\n\n🗓 1 ноября, 18:00\n⏱ 1 ч 20 мин\n🎟 1 300 ₽, купить можно тут bileton.ru/widget/teatr_kluch_Simon.')
+  await t.say(62, 'расскажи про Симона')
+  const said = t.last().text
+  assert.ok(/\n\n🎟 <a href="https:\/\/bileton\.ru\/widget\/teatr_kluch_Simon">Купить билет<\/a>$/.test(said), said)
+  assert.ok(!/купить можно тут/.test(said), said)
+  assert.ok(/1 ч 20 мин/.test(said) && !/[  ]/.test(said), JSON.stringify(said))
+  t.close()
+})
+
+test('ответ про спектакль без ссылки: ссылку добавляет код из данных; ноль у даты убран', async () => {
+  const t = formRig({}, '«Симон», весёлые похороны в армянском городке, 18+ 🎭\n\n🗓 01 ноября, 18:00\n⏱ 1 ч 20 мин\n🎟 1 300 ₽')
+  await t.say(64, 'расскажи про Симона')
+  const said = t.last().text
+  assert.ok(/🎟 <a href="https:\/\/bileton\.ru\/widget\/teatr_kluch_Simon">Купить билет<\/a>$/.test(said), said)
+  assert.ok(/🗓 1 ноября/.test(said), said)
+  // a question that names no show gets no link added
+  const t2 = formRig({}, 'Курсы для подростков: «Проявиться», 12–17 лет.')
+  await t2.say(65, 'какие курсы для подростков?')
+  assert.ok(!/bileton/.test(t2.last().text), t2.last().text)
+  t.close()
+  t2.close()
+})
+
+test('вопрос посреди анкеты: шаг повторяется с напоминанием, к какой записи он', async () => {
+  const t = formRig({ 'запишите на лагерь': ['signup', 'camp'] }, 'Билет на «Симона» 1 300 ₽ 🎟')
+  await t.say(63, 'запишите на лагерь')
+  await t.tap(63, 'consent:yes')
+  await t.say(63, 'слушай на симон сколько стоит')
+  assert.match(t.last().text, /Возвращаясь к записи: <b>Лагерь «Солнечная пыль»<\/b>\. Как вас зовут\?/)
+  t.close()
 })
 
 test('выйти из анкеты можно на любом шаге: кнопкой и словами', async () => {
