@@ -311,8 +311,8 @@ function formRig(labels, reply = 'Ответ.') {
         if (labels === null) throw new Error('разборщик лёг')
         const text = body.messages.at(-1).content
         parsedTexts.push(text)
-        const [action, target] = labels[text] || ['answer', '']
-        return { choices: [{ message: { content: JSON.stringify({ action, target: target || '', topics: [], age: 0, show: '' }) } }] }
+        const [action, target, topics] = labels[text] || ['answer', '']
+        return { choices: [{ message: { content: JSON.stringify({ action, target: target || '', topics: topics || [], age: 0, show: '' }) } }] }
       }
       asked.push(body.messages)
       return { choices: [{ message: { content: reply } }] }
@@ -596,6 +596,37 @@ test('вопрос про спектакль: под ответом нет кн�
   assert.ok(t2.lastData().includes('signup:start'), 'про курсы кнопка пропала')
   t.close()
   t2.close()
+})
+
+test('«квест или карнавальная ночь, что лучше?»: по кнопке на каждое, не анкета на курсы; «давай» не записывает', async () => {
+  // the live message, typo and all, plus the same with the title spelled right
+  const q = 'слушаай я вот думаю либо на квест записаться либо на карнавальную ночь что лучше?'
+  const t = formRig({ [q]: ['answer', '', ['signup']], 'давай': ['confirm', ''] }, 'Квест для детей, карнавальная ночь для взрослых. Кому именно?')
+  await t.say(68, q)
+  const data = t.lastData()
+  assert.ok(data.includes('signup:dir:quest') && data.includes('signup:dir:carnival'), JSON.stringify(data))
+  assert.ok(!data.includes('signup:start'), 'кнопка курсов под квестом и карнавалом: ' + JSON.stringify(data))
+  await t.say(68, 'давай')
+  assert.equal(t.store.getChat(68).step, null, '«давай» открыл анкету: ' + t.last().text)
+  // with the typo only the quest is recognised: one button, still no course form, still a choice
+  const typo = 'либо на квест либо на карновальную ночьт что лучше?'
+  const t2 = formRig({ [typo]: ['answer', '', ['signup']], 'давай': ['confirm', ''] }, 'Ответ.')
+  await t2.say(69, typo)
+  assert.equal(JSON.stringify(t2.lastData()), '["signup:dir:quest"]')
+  await t2.say(69, 'давай')
+  assert.equal(t2.store.getChat(69).step, null, '«давай» записал на квест посреди выбора')
+  t.close()
+  t2.close()
+})
+
+test('общее «как записаться?» без цели: кнопка к списку, а не анкета на курсы', async () => {
+  const t = formRig({ 'а как к вам записаться?': ['answer', '', ['signup']] }, 'Записать можно прямо здесь, в чате.')
+  await t.say(70, 'а как к вам записаться?')
+  assert.equal(JSON.stringify(t.lastData()), '["signup:menu"]')
+  await t.tap(70, 'signup:menu')
+  assert.match(t.last().text, /Записать могу сюда/)
+  assert.equal(t.store.getChat(70).step, null)
+  t.close()
 })
 
 test('кнопку ставит разборщик: вопрос про лагерь даёт «Записаться: лагерь», обещание в ответе без цели кнопки не даёт', async () => {

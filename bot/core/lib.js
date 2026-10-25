@@ -781,7 +781,7 @@ function namedTargets(knowledge, text, nowMs) {
 const ANY_PLACE = /мероприят|спектакл|афиш|какой[- ]?нибудь|какое[- ]?нибудь|что[- ]?нибудь|куда[- ]?нибудь|что угодно|куда угодно|направлени/i
 function offersChoice(knowledge, text, nowMs) {
   const t = String(text || '')
-  if (!/(^|[^а-яё])или(?![а-яё])/i.test(t)) return false
+  if (!/(^|[^а-яё])(или|либо)(?![а-яё])/i.test(t)) return false
   return ANY_PLACE.test(t) || namedTargets(knowledge, t, nowMs).length >= 2
 }
 
@@ -1926,6 +1926,8 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
       else res.out.push(msg(s.chatId, 'Приём заявок на это сейчас закрыт.', mainKeyboard()))
       return res
     }
+    // the list of where the bot can sign up, under a general «как записаться?»
+    if (ev.data === 'signup:menu') { res.out.push(msg(s.chatId, signupMenuText(knowledge, nowMs), mainKeyboard())); return res }
     if (ev.data === 'signup:start') { runSignupStart(res, s, nowMs, null, knowledge); return res }
     if (ev.data === 'signup:extra') { runSignupStart(res, s, nowMs, 'extra', knowledge); return res }
     if (ev.data === 'signup:new') { runSignupStart(res, s, nowMs, 'new', knowledge); return res }
@@ -2024,16 +2026,30 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
     // a direction («а лагерь сколько стоит?») gets that one's signup button, a
     // question about signing up in general («как записаться?») the course one.
     // A show never gets one, and a closed direction neither (the model says so).
-    const asked = a === 'answer' && !aboutShow ? target : null
-    const wantsOffer = a === 'answer' && !aboutShow && (asked ? asked.open !== false : (parsed.topics || []).indexOf('signup') !== -1)
-    const offerDir = wantsOffer && asked && asked !== COURSE_TARGET ? asked : null
-    const offer = wantsOffer ? (!offerDir && hasOpenLead(s, nowMs) ? 'extra' : 'signup') : null
+    // With no single target («квест или карнавальная ночь, что лучше?») the
+    // buttons are for what the message names itself, one each; with nothing
+    // named, a button to the list. Never the course form by default: a
+    // «✍️ Оформить заявку» under the quest and the carnival opened the courses.
+    let offer = null
+    let offerDirs = []
+    if (a === 'answer' && !aboutShow) {
+      const named = target ? [] : namedTargets(knowledge, t, nowMs).filter((d, i, all) => d.open !== false && all.indexOf(d) === i)
+      if (target) {
+        if (target.open !== false) { offer = target === COURSE_TARGET && hasOpenLead(s, nowMs) ? 'extra' : 'signup'; offerDirs = [target] }
+      } else if (named.length) {
+        offer = 'signup'
+        offerDirs = named.slice(0, 3)
+      } else if ((parsed.topics || []).indexOf('signup') !== -1) offer = 'menu'
+    }
     // Four pages fit in the prompt whole. Routing saved about a rouble a question
     // and cost the bot its memory of the festival, the camp and the lab when a
     // follow-up landed on the wrong topic -- a bad trade at this size. It comes
     // back on when the handbook outgrows the prompt, not before.
     const topics = CFG.routeKnowledge && parsed.topics && parsed.topics.length ? parsed.topics : null
-    return requestModel(res, s, knowledge, nowMs, t, { offer, offerDir, parserDecided: true, smalltalk: a === 'smalltalk' }, topics)
+    // «квест или карнавальная ночь?» is still a choice even when only one of
+    // the two was recognised (a typo): a «давай» then is not a yes to it
+    const choice = /(^|[^а-яё])(или|либо)(?![а-яё])/i.test(t)
+    return requestModel(res, s, knowledge, nowMs, t, { offer, offerDirs, choice, parserDecided: true, smalltalk: a === 'smalltalk' }, topics)
   }
 
   const words = t.split(/\s+/).length
@@ -2354,37 +2370,43 @@ function afterModel(res, rawReply, nowMs, knowledge) {
     return { out, effects }
   }
   // Which signup button goes under the answer. With the parser on, it was
-  // decided before the model spoke (ctx.offer, ctx.offerDir), from what the
+  // decided before the model spoke (ctx.offer, ctx.offerDirs), from what the
   // person asked; the reply's wording is not read for it. Reading it is how a
   // reply about «Ева Кюн» once got the course form's button, and how a canned
   // «нажмите кнопку ниже» came with no button at all.
   let offer = null
-  let offerDir = null
+  let offerDirs = []
   if (ctx.parserDecided) {
     offer = ctx.offer || null
-    offerDir = ctx.offerDir || null
+    offerDirs = ctx.offerDirs || []
   } else {
     // The parser is down: the old way, kept as it is and not tuned any more.
     // A reply that talks about filing a signup comes with the way to do it; a
     // dropped «не могу записать» (parsed.replaced) counts as such talk.
     const promisesForm = parsed.replaced || /(оформ\S*|остав\S*|пода\S*)\s+(\S+\s+)?заявк|заявк\S*\s+(\S+\s+)?(оформ|принима|приму)|форм\S*\s+(\S+\s+)?(откро|появ)|откро\S*\s+(\S+\s+)?форм|(могу|можем|готов\S*)\s+(\S+\s+)?(записать|оформить|принять)|запис\S*\s+можно\s+(прямо\s+)?(здесь|тут|в\s+чате)/i.test(text)
-    offerDir = ctx.offer !== 'extra' && (ctx.offer || promisesForm) ? directionFor(knowledge, (res.model.userText || '') + ' ' + text, nowMs) : null
+    const offerDir = ctx.offer !== 'extra' && (ctx.offer || promisesForm) ? directionFor(knowledge, (res.model.userText || '') + ' ' + text, nowMs) : null
     // a closed direction gets no button at all: the reply already says it is closed
     const dirClosed = Boolean(offerDir && offerDir.open === false)
     // with no direction found the button opens the COURSE form, so a bare
     // promise counts only when the talk is about the studio
     const aboutCourses = /курс|студи|заняти|занима|групп|актёрск|актерск|педагог/i.test((res.model.userText || '') + ' ' + text)
     offer = dirClosed ? null : ctx.offer || (promisesForm && (offerDir || aboutCourses) ? (hasOpenLead(s, nowMs) ? 'extra' : 'signup') : null)
-    if (dirClosed) offerDir = null
+    offerDirs = offerDir && !dirClosed ? [offerDir] : []
   }
-  if (offer) s.signupOfferedAt = nowMs
-  s.offeredDir = offer && offerDir ? offerDir.id : null
+  // «давай» right after means yes to the offer only when it was one thing; to
+  // two buttons or the list it would have opened the course form by default
+  const single = (offer === 'signup' || offer === 'extra') && offerDirs.length <= 1 && !ctx.choice
+  if (single) s.signupOfferedAt = nowMs
+  s.offeredDir = single && offerDirs[0] && offerDirs[0] !== COURSE_TARGET ? offerDirs[0].id : null
   if (offer) {
-    const shortTitle = offerDir && offerDir.title.length > 26 ? offerDir.title.slice(0, 25) + '…' : offerDir && offerDir.title
-    const btn = offer === 'extra'
-      ? [['➕ Ещё одного к заявке', 'signup:extra'], ['📝 Новая заявка', 'signup:new']]
-      : offerDir ? [['✍️ Записаться: ' + shortTitle, 'signup:dir:' + offerDir.id]] : [['✍️ Оформить заявку', 'signup:start']]
-    out.push(msg(s.chatId, html || 'Оформить заявку можно кнопкой:', inline([btn])))
+    const dirButton = (d) => d === COURSE_TARGET
+      ? [['✍️ Оформить заявку на курсы', 'signup:start']]
+      : [['✍️ Записаться: ' + (d.title.length > 26 ? d.title.slice(0, 25) + '…' : d.title), 'signup:dir:' + d.id]]
+    const rows = offer === 'extra'
+      ? [[['➕ Ещё одного к заявке', 'signup:extra'], ['📝 Новая заявка', 'signup:new']]]
+      : offer === 'menu' ? [[['✍️ Куда можно записаться', 'signup:menu']]]
+      : offerDirs.length ? offerDirs.map(dirButton) : [[['✍️ Оформить заявку', 'signup:start']]]
+    out.push(msg(s.chatId, html || 'Оформить заявку можно кнопкой:', inline(rows)))
     return { out, effects }
   }
   // An empty reply is our failure (the model ran out of room), not the
