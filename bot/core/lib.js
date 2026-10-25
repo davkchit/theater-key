@@ -686,7 +686,8 @@ function parserMessages(userText, s, knowledge, nowMs) {
     '- «запишите на курс», «хочу на курсы», «запишите дочку, ей 7» → signup, course',
     '- «го в лагерь», «давай на солнечную пыль» → signup, id лагеря',
     '- «хочу записаться», «запиши меня куда-нибудь» → signup, target пустой',
-    '- «а можно к вам записаться?», «как записаться?», «на что можно записаться?» → answer: это вопрос, а не просьба',
+    '- «а можно к вам записаться?», «как записаться?» → answer: это вопрос, а не просьба',
+    '- «на что можно записаться?», «куда у вас можно записаться?», «какие есть варианты, куда записаться?» → signup, target пустой: бот сам покажет список',
     '- «хочу на курс какой-нибудь или мероприятия» → signup, target пустой: названо несколько вариантов',
     '- в анкете: «нет», «нетуу», «неа», «не хочу» → decline; «отмена», «забей», «передумал» → cancel',
     '- «ты отменил заявку?», «моя заявка ушла?» → answer',
@@ -1235,14 +1236,17 @@ function directionFor(knowledge, text, nowMs) {
 function directionsBlock(knowledge, nowMs) {
   const list = visibleDirections(knowledge, nowMs)
   if (!list.length) return ''
-  return '## Направления, на которые можно записаться через бота (кроме курсов)\n' + list.map((d) =>
+  // «(кроме курсов)» here read to the model as «not the courses»: asked where
+  // one can sign up, it listed these and left out the courses, the main thing
+  return '## Куда ещё можно записаться через бота, помимо актёрских курсов (на курсы бот тоже записывает). Заявки открыты везде, где не сказано иное\n' + list.map((d) =>
     '- «' + d.title + '» (' + (DIR_TYPE_LABEL[d.type] || 'событие') + ')' +
     (d.age ? ', возраст ' + d.age : '') +
     (d.schedule ? ', ' + d.schedule : '') +
     ((d.prices || []).length ? '. Цена: ' + d.prices.map((x) => x.name + ' ' + x.price).join('; ') : '') +
-    // only the fact: «записать можно прямо в чате» here was repeated by the
-    // model under every answer, an invitation rule 10 tells it not to make
-    '. ' + (d.open === false ? 'Заявки сейчас закрыты, записаться нельзя' : 'Заявки открыты') +
+    // only a closed one is marked: «заявки открыты» on every line came back
+    // on every line of the model's list, and «записать можно прямо в чате»
+    // before it under every answer, an invitation rule 10 forbids
+    (d.open === false ? '. Заявки сейчас закрыты, записаться нельзя' : '') +
     (d.desc ? '. ' + d.desc : '')+
     // its own dates from the afisha (a carnival night in December is beyond
     // the four weeks of afisha the prompt otherwise carries)
@@ -2009,7 +2013,10 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
         // the form opened, and the question in the same message was dropped.
         // The model answers it first, the form's first step follows, and the
         // question rides along in the lead for the administrator.
-        if (ASKS_TOO.test(t)) {
+        // ...but the list of where one can sign up («куда можно записаться?»)
+        // is itself the answer: given to the model it came back twice, once
+        // from the model without the courses and once from the code
+        if (ASKS_TOO.test(t) && (s.step || (parsed.topics || []).some((x) => x !== 'signup'))) {
           const form = res.out.splice(before)
           const last = form[form.length - 1]
           if (s.draft) s.draft.questions = (s.draft.questions || []).concat([t.slice(0, 200)])
@@ -2379,6 +2386,9 @@ function afterModel(res, rawReply, nowMs, knowledge) {
   if (ctx.parserDecided) {
     offer = ctx.offer || null
     offerDirs = ctx.offerDirs || []
+    // the reply already is the list (it names two or more directions from the
+    // admin): a button to the same list under it gave it twice
+    if (offer === 'menu' && namedTargets(knowledge, text, nowMs).filter((d) => d !== COURSE_TARGET).length >= 2) offer = null
   } else {
     // The parser is down: the old way, kept as it is and not tuned any more.
     // A reply that talks about filing a signup comes with the way to do it; a

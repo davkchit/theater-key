@@ -619,6 +619,34 @@ test('«квест или карнавальная ночь, что лучше?�
   t2.close()
 })
 
+test('«какие есть штуки, куда записаться можно?»: один полный список с курсами, без модели', async () => {
+  // the live message; the parser now calls it a signup with no target
+  const q = 'слушай какие у вас есть штуки кууда записаться можно?'
+  const t = formRig({ [q]: ['signup', '', ['signup']] }, 'не должно прийти')
+  await t.say(71, q)
+  const all = t.texts().join('\n')
+  assert.equal(t.asked.length, 0, 'список отдали модели')
+  assert.equal((all.match(/Записать могу сюда/g) || []).length, 1, all)
+  assert.ok(/Актёрские курсы/.test(all) && /Квест/.test(all), all)
+  assert.equal(t.store.getChat(71).step, null)
+  // a real second question in the same message still reaches the model
+  const t2 = formRig({ 'куда можно записаться и сколько стоит лагерь?': ['signup', '', ['signup', 'camp']] }, 'Про цену лагеря в данных нет.')
+  await t2.say(72, 'куда можно записаться и сколько стоит лагерь?')
+  assert.equal(t2.asked.length, 1, 'вопрос про лагерь потерялся')
+  t.close()
+  t2.close()
+})
+
+test('ответ модели уже список направлений: кнопки «Куда можно записаться» под ним нет', async () => {
+  const t = formRig({ 'а как к вам записаться?': ['answer', '', ['signup']] }, 'Записать можно на актёрские курсы, квест, карнавальную ночь и в лагерь «Солнечная пыль».')
+  await t.say(73, 'а как к вам записаться?')
+  assert.ok(!t.lastData().includes('signup:menu'), JSON.stringify(t.lastData()))
+  // and the model is told the courses are a signup too
+  const prompt = t.asked[0][0].content
+  assert.ok(/помимо актёрских курсов/.test(prompt) && !/кроме курсов\)/.test(prompt), 'в справочнике всё ещё «кроме курсов»')
+  t.close()
+})
+
 test('общее «как записаться?» без цели: кнопка к списку, а не анкета на курсы', async () => {
   const t = formRig({ 'а как к вам записаться?': ['answer', '', ['signup']] }, 'Записать можно прямо здесь, в чате.')
   await t.say(70, 'а как к вам записаться?')
