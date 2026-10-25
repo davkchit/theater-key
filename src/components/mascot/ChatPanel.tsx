@@ -129,6 +129,16 @@ export function ChatPanel({ onClose }: ChatPanelProps) {
     }
   }
 
+  // The bot repeats a form's buttons under each answer it gives meanwhile, so
+  // they are always at hand; the copies higher up are hidden instead of piling up.
+  const laterData = new Set<string>()
+  const repeated = new Set<string>()
+  for (const m of [...chat.messages].reverse()) {
+    const data = (m.buttons ?? []).flat().map((b) => b.data)
+    if (data.some((d) => laterData.has(d))) repeated.add(m.id)
+    data.forEach((d) => laterData.add(d))
+  }
+
   return (
     <div className="bg-paper text-ink relative flex h-full flex-col overflow-hidden">
       {/* paper grain over the whole window, faint, as on the site */}
@@ -192,7 +202,7 @@ export function ChatPanel({ onClose }: ChatPanelProps) {
                 <Avatar hidden={chat.messages[i - 1]?.from === 'bot'} />
                 <div className="border-ink bg-paper min-w-0 rounded-[14px] rounded-tl-[4px] border-2 px-3.5 py-2.5 text-[15px] leading-[1.5] break-words whitespace-pre-wrap shadow-[3px_3px_0_#1a1a1a]">
                   <RichText html={m.html} />
-                  {!m.used && (m.buttons ?? []).length > 0 && (
+                  {!m.used && !repeated.has(m.id) && (m.buttons ?? []).length > 0 && (
                     <div className="mt-2.5 flex flex-col gap-1.5 whitespace-normal">
                       {(m.buttons ?? []).map((row, ri) => (
                         <div key={ri} className="flex flex-wrap gap-1.5">

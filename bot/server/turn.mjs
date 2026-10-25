@@ -135,7 +135,11 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
       } catch (e) {
         log('модель не ответила:', e.message)
         const ctx = res.model.ctx || {}
-        res.out.push({ chat_id: res.state.chatId, text: lib.modelDownText(knowledge) })
+        // a form's buttons come along even without a reprompt text: in the
+        // consent step they are all there is
+        const down = { chat_id: res.state.chatId, text: lib.modelDownText(knowledge) }
+        if (!ctx.reprompt && ctx.repromptMarkup) down.reply_markup = ctx.repromptMarkup
+        res.out.push(down)
         if (ctx.reprompt) res.out.push(Object.assign({ chat_id: res.state.chatId, text: ctx.reprompt }, ctx.repromptMarkup ? { reply_markup: ctx.repromptMarkup } : {}))
         res.effects.push({ type: 'devAlert', text: 'Модель не ответила: ' + String(e.message).slice(0, 300) })
       }

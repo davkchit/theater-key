@@ -81,9 +81,22 @@ function contactKeyboard() {
   }
 }
 
+// The age buttons follow the children's groups on the site («4–7 лет»…): they
+// were written in by hand once and went stale when the groups changed.
+let KID_RANGES = ['4–7 лет', '8–11 лет', '12–17 лет']
+function setAgeButtons(knowledge) {
+  const r = ((knowledge && knowledge.courses) || [])
+    .map((c) => String(c.ageRange || '').trim())
+    .filter((a) => /^\d/.test(a) && !/18/.test(a))
+  if (r.length) KID_RANGES = r.filter((a, i) => r.indexOf(a) === i).slice(0, 4)
+}
+
 function ageKeyboard() {
+  const kids = KID_RANGES.map((a) => ({ text: a }))
+  const rows = []
+  for (let i = 0; i < kids.length; i += 2) rows.push(kids.slice(i, i + 2))
   return {
-    keyboard: [[{ text: '5–7 лет' }, { text: '8–12 лет' }], [{ text: '13–17 лет' }, { text: 'Взрослый курс' }], [{ text: 'Отмена' }]],
+    keyboard: rows.concat([[{ text: 'Взрослый курс' }], [{ text: 'Отмена' }]]),
     resize_keyboard: true,
     one_time_keyboard: true,
   }
@@ -239,8 +252,15 @@ function afishaText(knowledge, nowMs) {
 }
 
 function coursesText(knowledge) {
-  const lines = knowledge.courses.map((c) => '• <b>' + esc(c.name) + '</b> (' + c.ageRange + '): ' + esc(c.desc))
-  return '<b>Актёрские курсы:</b>\n' + lines.join('\n') + '\n\nНабор в группы продолжается. Стоимость и расписание расскажет администратор, когда перезвонит.'
+  // price, schedule and intake come from the site like the rest: this reply
+  // used to say «стоимость и расписание расскажет администратор» long after
+  // both were on the site
+  const tidy = (s) => String(s).replace(/\s*·\s*/g, ', ')
+  const lines = knowledge.courses.map((c) => {
+    const more = [c.price, c.schedule, c.start].filter(Boolean).map(tidy).join('; ')
+    return '• <b>' + esc(c.name) + '</b> (' + c.ageRange + '): ' + esc(c.desc) + (more ? '\n  ' + esc(more) : '')
+  })
+  return '<b>Актёрские курсы:</b>\n' + lines.join('\n') + '\n\nЗаписаться можно кнопкой ниже: администратор перезвонит по заявке.'
 }
 
 // The phone, hours, address and links the bot's own phrases name. They come
@@ -556,7 +576,7 @@ const PARSER_TOPICS = {
   afisha: 'ближайшие показы, даты, время, что идёт на этой неделе или в конкретный день',
   shows: 'сами спектакли: сюжет, жанр, длительность, режиссёр, возрастная маркировка',
   courses: 'студия и курсы: группы по возрасту, чему учат, стоимость занятий, скидки и оплата занятий',
-  signup: 'как записаться на курс, что будет после заявки',
+  signup: 'как записаться на курс или направление, куда можно записаться, что будет после заявки',
   tickets: 'где купить билет, сколько стоит билет, скидки группам, ссылки, Пушкинская карта',
   festival: 'фестиваль «Действующие лица», как стать участником',
   camp: 'летний лагерь «Солнечная пыль»',
@@ -567,7 +587,7 @@ const PARSER_TOPICS = {
 
 const PARSER_INTENTS = {
   question: 'спрашивает факт о театре: что идёт, сколько стоит, где вы, про что спектакль',
-  signup: 'речь о занятиях в студии: «хочу записаться», «запишите дочку», «как записаться?», «можно моего ребёнка к вам отдать?». ТОЛЬКО про курсы. Купить билет на спектакль — это НЕ signup, это question с темой tickets. И «сколько стоит?», «есть ли пробное?», «в какую группу?» — тоже question: человек собирает сведения',
+  signup: 'речь о записи: на курсы в студии или на направление (лагерь, лаборатория, фестиваль, квест, карнавал и другие из данных театра): «хочу записаться», «запишите дочку», «как записаться?», «давай на лагерь», «го на фестиваль», «лучше на курсы». «Давай» с названием, куда записать, это signup, а не confirm. Купить билет на спектакль — это НЕ signup, это question с темой tickets. И «сколько стоит?», «есть ли пробное?», «в какую группу?» — тоже question: человек собирает сведения',
   add_child: 'хочет добавить ещё одного человека к уже оставленной заявке',
   cancel: 'отказывается от записи: «отмена», «стоп», «не надо», «передумал», «забей», «потом», «проехали». Во время заполнения формы любой такой отказ — это cancel',
   small_talk: 'приветствие, благодарность, прощание, болтовня. Сюда же «ты бот или человек?» — это любопытство, а не просьба позвать сотрудника',
@@ -673,7 +693,7 @@ const SYSTEM_PROMPT = [
   '',
   'ХАРАКТЕР:',
   '- Тёплый, живой, чуть театральный кот. Говоришь легко, с улыбкой, без канцелярита.',
-  '- Кошачье щепоткой: «мяу», «мяу-обещаю», «лапкой подпишусь», не больше одного раза за ответ и не в начале каждого ответа. Ответ важнее шутки.',
+  '- Кошачье щепоткой: «мяу», «лапкой подпишусь», не больше одного раза за ответ и не в начале каждого ответа. Ответ важнее шутки.',
   '- Почти в каждом ответе один эмодзи по смыслу: 🎭 спектакли и репертуар, 🎟 билеты, 🎬 премьера, 🗓 даты и афиша, 🎓 курсы и занятия, ✨ впечатления, 📍 адрес, 🐾 про себя-кота. Один на ответ, в конце фразы или строки.',
   '- Обращайся на «вы». Если человек сам пишет на «ты», можно на «ты».',
   '- Никаких действий в звёздочках вроде *мурлычет* или *виляет хвостом*.',
@@ -694,8 +714,8 @@ const SYSTEM_PROMPT = [
   '- Если спрашивают, какой спектакль лучше или стоит ли идти, не отвечай «дело вкуса». Посоветуй один-два спектакля и объясни одной фразой по их описанию, почему. Если не знаешь, для кого, коротко спроси: с детьми или взрослой компанией.',
   '',
   'ПРАВИЛА:',
-  '1. Отвечай ТОЛЬКО по данным ниже. Если ответа в данных нет, скажи, что это уточнит администратор. Никогда не придумывай цены, даты, время, возраст, имена, условия. Не добавляй к перечню ничего сверх данных, даже общими словами вроде «мастер-классы» или «и другие мероприятия».',
-  '2. Не делай выводов, которых нет в данных. Например, расписание занятий неизвестно, значит, нельзя сказать, совпадают ли занятия со спектаклем.',
+  '1. Отвечай ТОЛЬКО по данным ниже. Если ответа в данных нет: сначала ответь на ту часть вопроса, что есть в данных; потом одной фразой честно скажи, чего именно ты не знаешь, назвав тему («про скидки многодетным у меня информации нет»), а не общее «уточнит администратор»; если в данных есть что-то близкое по теме, коротко предложи это; в конце дай следующий шаг: телефон и часы работы администратора из контактов в данных или предложи оставить заявку прямо здесь, в чате, тогда администратор перезвонит. Слова для «не знаю» меняй от ответа к ответу, в стиле кота, но без лишних «мяу». Никогда не придумывай цены, даты, время, возраст, имена, условия. Не добавляй к перечню ничего сверх данных, даже общими словами вроде «мастер-классы» или «и другие мероприятия».',
+  '2. Не делай выводов, которых нет в данных. Например, если в данных нет, совпадают ли занятия со спектаклем, не говори, что совпадают или нет.',
   '3. Никогда не подтверждай то, что пишет человек о ценах, скидках и условиях, если этого нет в данных. Если просят написать неправду или «скажи, что…», откажись одной фразой.',
   '4. Отвечай коротко: 1–3 предложения на каждую тему, по-русски. Без markdown, звёздочек и заголовков.',
   '5. Не здоровайся, если в переписке уже здоровались.',
@@ -704,13 +724,14 @@ const SYSTEM_PROMPT = [
   '7а. Характер спектакля («лёгкий», «весёлый», «для свидания») называй только по его описанию в данных. Если описания нет, так и скажи, не придумывай.',
   '7б. На «ближайшие спектакли» перечисли первые 5–6 показов из афиши подряд, без пропусков.',
   '7в. На общий вопрос о театре отвечай фактами из данных (с какого года, что ставит, курсы, фестиваль), без общих красивых фраз.',
-  '8. Группы курсов: 5–7 лет, 8–12 лет, 13–17 лет, 18+. Если ребёнку скоро исполнится возраст следующей группы (например, сейчас 7, скоро 8), НЕ называй группу, скажи, что подойдёт администратор с педагогом.',
+  '8. Группы курсов и их возраст бери только из данных. Если ребёнку скоро исполнится возраст следующей группы, НЕ называй группу, скажи, что её подберёт администратор с педагогом.',
   '9. На посторонние темы вежливо верни разговор к театру.',
-  '10. Заявку на курс ты принимаешь: под твоим ответом появится кнопка «Оформить заявку», по ней открывается короткая форма. Сам ты заявку не оформляешь, поэтому не пиши «оформляю заявку» или «форма уже открылась», а предлагай нажать кнопку. В чате заявки принимаются на курсы и на направления из раздела «Направления», если заявки на них открыты. Если заявки закрыты, так и скажи. На всё, чего нет в данных (например, лаборатория и лагерь), заявок в чате нет. Никогда не говори, что не можешь записать или не принимаешь заявки. Но имя и телефон спрашивает форма, а не ты: не проси и не повторяй телефоны, фамилии и другие личные данные в переписке.',
+  '10. Заявки ты принимаешь прямо в чате: на курсы и на направления из раздела «Направления», если заявки на них открыты. Кнопки и вопросы заявки показывает система сама, поэтому никогда не описывай их: не пиши «нажмите кнопку», «откроется форма», «я открою форму», «оформляю заявку». Просто скажи, что записать можно прямо здесь, или спроси, куда записать. Если заявки закрыты, так и скажи. На то, чего нет в данных, заявок в чате нет. Никогда не говори, что не можешь записать или не принимаешь заявки. Но имя и телефон спрашивает форма, а не ты: не проси и не повторяй телефоны, фамилии и другие личные данные в переписке.',
   '11. Отвечай только на последнее сообщение человека. Никогда не пиши реплики за человека и не продолжай диалог сам.',
-  '12. Стоимость занятий называй только ту, что есть в данных, и всегда со словом «от». Про скидки, рассрочку и способы оплаты ты не знаешь, это уточнит администратор.',
+  '12. Стоимость занятий называй только ту, что есть в данных, и всегда со словом «от». Про скидки, льготы, рассрочку и способы оплаты в данных ничего нет: отвечай по правилу 1, без догадок.',
   '13. Никогда не обещай, что вам перезвонят или с вами свяжутся. Звонок бывает только по оформленной заявке с телефоном. Если человек просит администратора, дай телефон и часы работы или предложи оставить заявку, но не обещай звонок сам.',
   '14. Комплимент, восторг или просто эмоция без вопроса («какие вы красивые», «обожаю вас», «вы лучшие») — это не вопрос: коротко и тепло поблагодари от лица кота, одной-двумя фразами, без списков спектаклей и курсов. Можно в конце одной фразой предложить афишу.',
+  '15. Если сообщение непонятное (набор букв, обрывок без смысла), не отвечай «уточнит администратор»: коротко переспроси, что человек имел в виду.',
   '',
   'МЕТКИ. Ставь в самом конце ответа, отдельной строкой, только когда они точно подходят:',
   '[ЗАПИСЬ]: человек прямо говорит, что хочет записаться или записать ребёнка (в том числе ещё одного). Не ставь её на вопросы о курсах, ценах и на шутки.',
@@ -732,7 +753,11 @@ const TONE_EXAMPLES = [
   { role: 'user', text: 'привет, а ты кто?' },
   { role: 'assistant', text: 'Кот театра «Ключ», живу за кулисами. Подскажу, что идёт, расскажу про курсы и могу записать 🐾' },
   { role: 'user', text: 'а рассрочка есть?' },
-  { role: 'assistant', text: 'Про рассрочку не подскажу, это лучше уточнить у администратора.' },
+  { role: 'assistant', text: 'Про рассрочку, честно, не знаю: в моих данных этого нет 🐾 Цены на занятия подскажу, а про оплату частями лучше спросить администратора.' },
+  // «не знаю» in two different words, so it is not copied word for word; the
+  // phone itself comes from the data (rule 1), never from an example
+  { role: 'user', text: 'а пенсионерам льготы на билеты бывают?' },
+  { role: 'assistant', text: 'Тут не подскажу: про льготы для пенсионеров мне ничего не известно. Это точно знает администратор, ему можно позвонить в рабочие часы.' },
   { role: 'user', text: 'а с ребёнком 10 лет на спектакль 18+ можно?' },
   { role: 'assistant', text: 'Нет, спектакль 18+, ребёнка на него не пустят. Но для юных зрителей у нас тоже кое-что найдётся.' },
   // no theatre facts in these examples: the model repeats them, and a fact
@@ -785,7 +810,7 @@ function parseModelReply(raw) {
     // the model forgets this marker far more often than it forgets to say
     // "администратор уточнит" -- so the wording itself also counts. This log is
     // what the monthly FAQ update is built from, it must not miss questions.
-    unknown: /\[НЕТ_ОТВЕТА\]/i.test(text) || /(уточнит|подскажет|расскажет|сообщит)\s+администратор|администратор\s+(уточнит|подскажет|расскажет|сообщит|сможет)|у\s+администратора|не\s+знаю|нет\s+(такой\s+)?информации|не\s+могу\s+ответить/i.test(text),
+    unknown: /\[НЕТ_ОТВЕТА\]/i.test(text) || /(уточнит|подскажет|расскажет|сообщит)\s+администратор|администратор\s+(уточнит|подскажет|расскажет|сообщит|сможет)|у\s+администратора|не\s+знаю|нет\s+(такой\s+)?информации|информации\s+(об\s+этом\s+|про\s+это\s+)?(у\s+меня\s+)?нет|не\s+могу\s+ответить|не\s+подскажу|(ничего\s+)?не\s+известно|в\s+(моих|наших)\s+данных|нет\s+(в\s+)?(моих\s+)?данных|(спросить|спросите|узнать|уточнить)\s+(лучше\s+)?у\s+администратора|(спросить|спросите)\s+администратора/i.test(text),
   }
   const clean = text
     .replace(/\[(ЗАПИСЬ|ЧЕЛОВЕК|НЕТ_ОТВЕТА)\]/gi, '')
@@ -820,7 +845,7 @@ function freshState(state, chatId, nowMs) {
   // someone who vanished mid-signup and comes back later with "здравствуйте"
   // must not be asked "сколько лет ребёнку?" in reply
   const ttl = s.step === 'consent' ? CFG.consentTtlMs : CFG.signupTtlMs
-  if (s.step && nowMs - s.stepAt > ttl) { s.step = null; s.draft = null; s.stepMiss = 0; s.reminded = 0 }
+  if (s.step && nowMs - s.stepAt > ttl) { s.step = null; s.draft = null; s.stepMiss = 0; s.reminded = 0; s.nextSignup = null }
   const pv = promptVersion()
   if (s.promptV !== pv) { s.history = []; s.promptV = pv }
   const day = todayIso(nowMs)
@@ -930,7 +955,19 @@ function startSignup(state, nowMs, mode, knowledge) {
   state.draft = { questions: state.pendingQuestions || [] }
   state.pendingQuestions = null
   state.pendingAge = null
-  return { msgs: [msg(state.chatId, 'Оформлю заявку, это займёт полминуты. Администратор перезвонит и всё расскажет.\n\nНажимая «Согласен», вы соглашаетесь на обработку персональных данных для связи с вами по заявке.', inline([[['✅ Согласен', 'consent:yes'], ['Отмена', 'signup:cancel']]]))], effects: [] }
+  return { msgs: [courseConsentMsg(state, '')], effects: [] }
+}
+
+// The course form says what it is for, like a direction's does: «а куда ты меня
+// заполняешь» was a real person's reply to a form that did not.
+function courseConsentMsg(state, lead) {
+  return msg(state.chatId, lead + 'Оформлю заявку: <b>Актёрские курсы</b>. Это займёт полминуты, администратор перезвонит и всё расскажет.\n\n' + CONSENT_TEXT, consentButtons())
+}
+
+const CONSENT_TEXT = 'Нажимая «Согласен», вы соглашаетесь на обработку персональных данных для связи с вами по заявке.'
+
+function consentButtons() {
+  return inline([[['✅ Согласен', 'consent:yes'], ['Отмена', 'signup:cancel']]])
 }
 
 // ---------------------------------------------------------------- model calls
@@ -1044,7 +1081,7 @@ function directionsBlock(knowledge, nowMs) {
     (d.age ? ', возраст ' + d.age : '') +
     (d.schedule ? ', ' + d.schedule : '') +
     ((d.prices || []).length ? '. Цена: ' + d.prices.map((x) => x.name + ' ' + x.price).join('; ') : '') +
-    '. ' + (d.open === false ? 'Заявки сейчас закрыты, записаться нельзя' : 'Заявки открыты, под ответом будет кнопка записи') +
+    '. ' + (d.open === false ? 'Заявки сейчас закрыты, записаться нельзя' : 'Заявки открыты, записать можно прямо в чате') +
     (d.desc ? '. ' + d.desc : '')+
     // its own dates from the afisha (a carnival night in December is beyond
     // the four weeks of afisha the prompt otherwise carries)
@@ -1063,14 +1100,36 @@ function startDirSignup(state, dir, nowMs) {
   }
   state.pendingQuestions = null
   return {
-    msgs: [msg(state.chatId, 'Оформлю заявку: <b>' + esc(dir.title) + '</b>. Это займёт пару минут.\n\nНажимая «Согласен», вы соглашаетесь на обработку персональных данных для связи с вами по заявке.', inline([[['✅ Согласен', 'consent:yes'], ['Отмена', 'signup:cancel']]]))],
+    msgs: [dirConsentMsg(state, dir, '')],
     effects: [],
   }
 }
 
+function dirConsentMsg(state, dir, lead) {
+  return msg(state.chatId, lead + 'Оформлю заявку: <b>' + esc(dir.title) + '</b>. Это займёт пару минут.\n\n' + CONSENT_TEXT, consentButtons())
+}
+
+// Words that make a signup a course one even though no course is named:
+// a child, an age, the studio. «Запиши меня куда-нибудь» has none of them.
+const COURSE_HINT = /курс|студи|заняти|занима|групп|актёр|актер|мастерств|доч|сын|ребён|ребен|ребят|дет(ей|ям|и)(?![а-яё])|\d/i
+
+// «Запиши меня куда-нибудь» used to open the course form straight away, and
+// the person, who had not asked for courses, was then stuck in it. Now the bot
+// lists where it can sign up and waits for the person to pick.
+function signupMenuText(knowledge, nowMs) {
+  const ranges = ((knowledge && knowledge.courses) || []).map((c) => String(c.ageRange || '').trim()).filter(Boolean)
+  const lines = ['• Актёрские курсы' + (ranges.length ? ': ' + ranges.filter((a, i) => ranges.indexOf(a) === i).join(', ') : '')]
+  for (const d of visibleDirections(knowledge, nowMs)) {
+    if (d.open === false) continue
+    lines.push('• ' + esc(d.title))
+  }
+  return 'Записать могу сюда:\n' + lines.join('\n') + '\n\nНапишите, куда хотите, и оформим 🐾'
+}
+
 // What a "запишите" means: the direction the message names, else (for a bare
-// "давай" after an offer) the one that was offered, else a course. False means
-// the direction is closed, and the caller lets the model explain that.
+// "давай" after an offer) the one that was offered, else a course when the
+// message points at one, else the list of what there is. False means the
+// direction is closed, and the caller lets the model explain that.
 function beginSignup(res, s, nowMs, knowledge, text, useOffered) {
   let dir = directionFor(knowledge, text, nowMs)
   if (!dir && useOffered && s.offeredDir) dir = directionById(knowledge, s.offeredDir, nowMs)
@@ -1079,10 +1138,179 @@ function beginSignup(res, s, nowMs, knowledge, text, useOffered) {
   if (dir) {
     const r = startDirSignup(s, dir, nowMs)
     res.out.push(...r.msgs)
+    insteadOfLead(res, s, text)
+    return true
+  }
+  // «хочу записаться» right after talking about one thing means that thing
+  if (!useOffered && !COURSE_HINT.test(text)) {
+    const recent = recentTarget(knowledge, s, nowMs)
+    if (recent && recent !== COURSE_TARGET) {
+      if (recent.open === false) return false
+      res.out.push(...startDirSignup(s, recent, nowMs).msgs)
+      insteadOfLead(res, s, text)
+      return true
+    }
+    if (recent) { runSignupStart(res, s, nowMs, null, knowledge); return true }
+  }
+  if (!useOffered && !COURSE_HINT.test(text) && !s.pendingAge && !s.pendingExtra && !hasOpenLead(s, nowMs) && visibleDirections(knowledge, nowMs).some((d) => d.open !== false)) {
+    res.out.push(msg(s.chatId, signupMenuText(knowledge, nowMs), mainKeyboard()))
     return true
   }
   runSignupStart(res, s, nowMs, null, knowledge)
   return true
+}
+
+// ------------------------------------------------- switching between forms
+//
+// «Давай лучше на лагерь» halfway through the course form. The bot used to keep
+// the course form and the model kept telling the person to press a button that
+// was never there. Which form is wanted is decided here, in code, from the
+// names in the admin; the parser only says whether the person asks or wants.
+
+const WANTS_SWITCH = /(^|[^а-яё])(го|давай\S*|лучше|вместо|хочу|хотим|тогда|передумал\S*)(?![а-яё])|запиш|записа|оформ/i
+const ALSO_SIGNUP = /(^|[^а-яё])(тоже|ещё|еще|также|вдобавок)(?![а-яё])/i
+const INSTEAD = /(^|[^а-яё])(лучше|вместо|передумал\S*)(?![а-яё])/i
+const COURSE_TARGET = { id: 'course', title: 'Актёрские курсы' }
+
+function draftTarget(draft) {
+  return draft && draft.dir ? { id: draft.dir.id, title: draft.dir.title } : COURSE_TARGET
+}
+
+// name and phone already given in the old form carry over to the new one
+function draftKnown(draft) {
+  const ans = (label) => ((draft && draft.answers) || []).find((a) => a.label === label)
+  const name = (draft && draft.name) || (ans('Имя') || {}).value || (draft && draft.known && draft.known.name) || null
+  const phone = (draft && draft.phone) || (ans('Телефон') || {}).value || (draft && draft.known && draft.known.phone) || null
+  return { name, phone }
+}
+
+function namedTarget(knowledge, text, nowMs) {
+  const dir = directionFor(knowledge, text, nowMs)
+  if (dir) return dir
+  return /курс|студи|актёрск|актерск/i.test(text) ? COURSE_TARGET : null
+}
+
+// The one thing the last two exchanges were about, if it was exactly one: a
+// reply listing every direction names them all and decides nothing.
+function recentTarget(knowledge, s, nowMs) {
+  const found = new Map()
+  for (const h of (s.history || []).slice(-3)) {
+    const t = String(h.text || '').toLowerCase().replace(/ё/g, 'е')
+    for (const d of visibleDirections(knowledge, nowMs)) {
+      const words = String(d.title).toLowerCase().replace(/ё/g, 'е').split(/[^а-яa-z0-9]+/).filter((w) => w.length >= 5)
+      if (words.some((w) => t.indexOf(w.slice(0, Math.max(5, w.length - 2))) !== -1) || (DIR_TYPE_RE[d.type] && DIR_TYPE_RE[d.type].test(t))) found.set(d.id, d)
+    }
+    if (/курс|студи|групп/i.test(t)) found.set('course', COURSE_TARGET)
+  }
+  return found.size === 1 ? [...found.values()][0] : null
+}
+
+// The current step asked again, as one message the switch text can lead into.
+function stepPrompt(s, knowledge) {
+  const d = s.draft
+  if (s.step === 'consent') return d.dir ? dirConsentMsg(s, d.dir, '') : courseConsentMsg(s, '')
+  if (s.step === 'name') return msg(s.chatId, 'Как вас зовут?', { remove_keyboard: true })
+  if (s.step === 'age') return msg(s.chatId, esc(d.name) + ', сколько лет? Если записываете ребёнка, напишите его возраст, а если себя, то свой.', ageKeyboard())
+  if (s.step === 'phone') return msg(s.chatId, 'Остался телефон. Нажмите кнопку ниже, номер подставится сам. Или напишите номер сообщением.', contactKeyboard())
+  if (s.step === 'confirm') return courseSummary(s, knowledge)
+  if (s.step === 'dir_field') return dirQuestion(s)
+  if (s.step === 'dir_confirm') return dirSummary(s)
+  return null
+}
+
+function withLead(lead, m) {
+  return Object.assign({}, m, { text: noDashes(lead) + m.text })
+}
+
+// «давай на солнечную пыль», «го на курсы»: a short order naming where. Told
+// apart in code, by the names in the admin: the parser read this «давай» as a
+// bare yes, the model then promised a form and nothing opened.
+const ASK_WORDS = /(^|[^а-яё])(расскажи\S*|сколько|что|когда|где|как|какой|какая|какие|почему|зачем|ли|есть)(?![а-яё])/i
+
+// short, no question in it, not a refusal («не хочу записываться» is not an order)
+function isOrder(text) {
+  return !/\?/.test(text) && !ASK_WORDS.test(text) && text.split(/\s+/).length <= 8 && !/отмен|отказ|передумал|не\s+(надо|нужно|хочу|хотим|буду|будем|стоит)|записал|оставил|подал/i.test(text)
+}
+
+function wantsNamed(knowledge, text, nowMs) {
+  if (!isOrder(text) || !WANTS_SWITCH.test(text)) return null
+  return namedTarget(knowledge, text, nowMs)
+}
+
+function switchSignup(res, s, text, parsed, knowledge, nowMs) {
+  if (!s.draft || !text || s.step === 'extra_age') return false
+  const target = namedTarget(knowledge, text, nowMs)
+  if (!target) return false
+  const cur = draftTarget(s.draft)
+  if (target.id === cur.id) return false
+  // «а в лагере сколько стоит?» is a question about the camp, not a move to it
+  const asking = parsed ? parsed.intent === 'question' && !parsed.wantsAction : looksLikeQuestion(text)
+  const wants = WANTS_SWITCH.test(text) || Boolean(parsed && parsed.intent === 'signup' && parsed.wantsAction)
+  if (asking || !wants) return false
+  const prompt = stepPrompt(s, knowledge)
+  if (target.open === false) {
+    res.out.push(withLead('Сюда запись сейчас закрыта: <b>' + esc(target.title) + '</b>. Продолжим эту заявку.\n\n', prompt))
+    return true
+  }
+  // «и на лагерь тоже»: two signups, one after the other, not a swap
+  if (ALSO_SIGNUP.test(text) && !INSTEAD.test(text)) {
+    s.nextSignup = target.id
+    res.out.push(withLead('Хорошо, сначала закончим эту заявку, а потом сразу оформлю и эту: <b>' + esc(target.title) + '</b> 🐾\n\n', prompt))
+    return true
+  }
+  const known = draftKnown(s.draft)
+  const consented = s.step !== 'consent'
+  const questions = s.draft.questions || []
+  // the consent message names the new form itself; past the consent nothing does
+  const lead = consented ? 'Хорошо, меняем на <b>' + esc(target.title) + '</b> 🐾\n\n' : 'Хорошо, меняем 🐾\n\n'
+  s.stepAt = nowMs
+  s.stepMiss = 0
+  s.reminded = 0
+  s.ageAsked = null
+  if (target === COURSE_TARGET) {
+    s.draft = { questions, name: known.name, phone: known.phone }
+    if (consented) res.out.push(withLead(lead, courseResume(s, nowMs)))
+    else { s.step = 'consent'; res.out.push(courseConsentMsg(s, lead)) }
+    return true
+  }
+  s.draft = {
+    questions,
+    dir: { id: target.id, title: target.title, type: target.type, askPhone: target.askPhone !== false, fields: (target.fields || []).slice(0, 8) },
+    known,
+  }
+  if (consented) {
+    const r = dirBegin(s, nowMs)
+    res.out.push(withLead(lead, r.out[0]), ...r.out.slice(1))
+  } else {
+    s.step = 'consent'
+    res.out.push(dirConsentMsg(s, s.draft.dir, lead))
+  }
+  return true
+}
+
+// After the consent: the name, unless the person already gave it in a form
+// they switched away from.
+function courseResume(s, nowMs) {
+  s.stepAt = nowMs
+  if (s.draft.name) {
+    s.step = 'age'
+    return msg(s.chatId, esc(s.draft.name) + ', сколько лет? Если записываете ребёнка, напишите его возраст, а если себя, то свой.', ageKeyboard())
+  }
+  s.step = 'name'
+  return msg(s.chatId, 'Как вас зовут?', { remove_keyboard: true })
+}
+
+function courseSummary(s, knowledge) {
+  const d = s.draft
+  return msg(s.chatId, 'Проверьте, всё верно?\n\n👤 ' + esc(d.name) + '\n' + personIcon(null, d.age) + ' ' + esc(knowledge ? childLine(knowledge, d.age) : d.age) + '\n📞 ' + d.phone, inline([[['✅ Да, всё верно', 'confirm:yes'], ['✏️ Исправить', 'confirm:edit']]]))
+}
+
+// «давай лучше на лагерь» after a course lead was already sent: the new form
+// opens, and the person is asked whether the old lead should go, so the
+// administrator does not call about the course for nothing.
+function insteadOfLead(res, s, text) {
+  if (!INSTEAD.test(String(text || '')) || !s.lastLead || s.lastLead.cancelled) return
+  res.out.push(msg(s.chatId, 'А прежнюю заявку на ' + esc(s.lastLead.name) + ' отменить? Тогда администратор не будет звонить по ней.', inline([[['❌ Да, отменить', 'mylead:cancel'], ['Нет, оставить', 'mylead:keep']]])))
 }
 
 function dirQuestion(state) {
@@ -1104,7 +1332,21 @@ function dirBegin(state, nowMs) {
   d.answers = []
   state.step = 'dir_field'
   state.stepAt = nowMs
-  return { out: [dirQuestion(state)], effects: [] }
+  return { out: [dirNext(state)], effects: [] }
+}
+
+// The next question, skipping the name and phone the person already gave in a
+// form they switched away from; the summary once nothing is left.
+function dirNext(state) {
+  const d = state.draft
+  const known = d.known || {}
+  while (d.i < d.qs.length && ((d.qs[d.i].kind === 'name' && known.name) || (d.qs[d.i].kind === 'phone' && known.phone))) {
+    d.answers.push({ label: d.qs[d.i].label, value: d.qs[d.i].kind === 'name' ? known.name : known.phone })
+    d.i += 1
+  }
+  if (d.i < d.qs.length) return dirQuestion(state)
+  state.step = 'dir_confirm'
+  return dirSummary(state)
 }
 
 function dirSummary(state) {
@@ -1143,6 +1385,7 @@ function dirStep(state, ev, nowMs) {
     if (ev.kind === 'callback' && ev.data === 'confirm:edit') {
       d.i = 0
       d.answers = []
+      d.known = null
       state.step = 'dir_field'
       state.stepAt = nowMs
       out.push(msg(state.chatId, 'Давайте заново.'), dirQuestion(state))
@@ -1192,12 +1435,7 @@ function dirStep(state, ev, nowMs) {
   d.answers.push({ label: q.label, value })
   d.i += 1
   state.stepAt = nowMs
-  if (d.i < d.qs.length) {
-    out.push(dirQuestion(state))
-    return { out, effects }
-  }
-  state.step = 'dir_confirm'
-  out.push(dirSummary(state))
+  out.push(dirNext(state))
   return { out, effects }
 }
 
@@ -1216,14 +1454,6 @@ function cancelSignup(state) {
 // One step of the signup scenario. Returns { out, effects } and, when the
 // person asked something instead of answering the step, needsModel + reprompt:
 // the question goes to the model, the step is asked again afterwards.
-function consentReminderText() {
-  return 'Чтобы продолжить запись, нажмите «Согласен». Или напишите «отмена».'
-}
-
-function consentReminder(state) {
-  return msg(state.chatId, consentReminderText(), inline([[['✅ Согласен', 'consent:yes'], ['Отмена', 'signup:cancel']]]))
-}
-
 function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
   const out = []
   const effects = []
@@ -1245,8 +1475,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
       state.stepMiss = 0; state.reminded = 0
       // a direction asks its own questions; a course keeps the age-and-group scenario
       if (state.draft && state.draft.dir) return dirBegin(state, nowMs)
-      state.step = 'name'; state.stepAt = nowMs
-      out.push(msg(state.chatId, 'Как вас зовут?', { remove_keyboard: true }))
+      out.push(courseResume(state, nowMs))
       return { out, effects }
     }
     if (parsedIntent === 'decline' || parsedIntent === 'cancel' || (text && CONSENT_NO_RE.test(text.trim())))
@@ -1257,19 +1486,15 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
       // a question -- he got "Хорошо, отменил" in reply to "а заявки делаешь?".
       const asking = parsedIntent === 'question' || looksLikeQuestion(text)
       if (!asking) state.stepMiss = (state.stepMiss || 0) + 1
-      // Remind twice, then let it go: seven turns of "нажмите «Согласен» выше"
-      // is what a hostage situation looks like from the other side.
-      // counted separately from misses: a question is not a miss, but a reminder
-      // shown after every question is still nagging
-      state.reminded = (state.reminded || 0) + 1
-      const remind = state.reminded <= 2
+      // No "нажмите «Согласен»" text after every answer: that read as being held
+      // in the form. The answer itself carries the two buttons instead, so they
+      // are always right under the last message and never scrolled away.
       const chat = smallTalkReply(text, nowMs)
       if (chat) {
-        out.push(msg(state.chatId, chat))
-        if (remind) out.push(consentReminder(state))
+        out.push(msg(state.chatId, chat, consentButtons()))
         return { out, effects }
       }
-      return { out, effects, needsModel: text, reprompt: remind ? consentReminderText() : null }
+      return { out, effects, needsModel: text, reprompt: null, repromptMarkup: consentButtons() }
     }
     return { out, effects }
   }
@@ -1331,7 +1556,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
       return { out, effects }
     }
     state.draft.age = age
-    state.step = 'phone'; state.stepAt = nowMs
+    state.step = state.draft.phone ? 'confirm' : 'phone'; state.stepAt = nowMs
     // Show which group the age matches -- information, not a placement. It also
     // catches a typo ("8" for "18") while the lead can still be corrected.
     const fit = knowledge ? courseForAge(knowledge, age) : null
@@ -1340,7 +1565,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
         ? 'По возрасту это группа «' + esc(fit.name) + '» (' + esc(fit.ageRange) + '): ' + esc(fit.desc)
         : 'По возрасту это ближе к группе «' + esc(fit.name) + '» (' + esc(fit.ageRange) + '), но возраст пограничный, так что точную группу подберёт педагог.'))
     }
-    out.push(msg(state.chatId, 'Остался телефон. Нажмите кнопку ниже, номер подставится сам. Или напишите номер сообщением.', contactKeyboard()))
+    out.push(state.step === 'confirm' ? courseSummary(state, knowledge) : msg(state.chatId, 'Остался телефон. Нажмите кнопку ниже, номер подставится сам. Или напишите номер сообщением.', contactKeyboard()))
     return { out, effects }
   }
 
@@ -1359,7 +1584,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
     }
     state.draft.phone = phone
     state.step = 'confirm'; state.stepAt = nowMs
-    out.push(msg(state.chatId, 'Проверьте, всё верно?\n\n👤 ' + esc(state.draft.name) + '\n' + personIcon(null, state.draft.age) + ' ' + esc(knowledge ? childLine(knowledge, state.draft.age) : state.draft.age) + '\n📞 ' + phone, inline([[['✅ Да, всё верно', 'confirm:yes'], ['✏️ Исправить', 'confirm:edit']]])))
+    out.push(courseSummary(state, knowledge))
     return { out, effects }
   }
 
@@ -1436,6 +1661,7 @@ function adminLeadKeyboard(leadId) {
 // most one model call). If res.model is set, n8n calls the model and passes
 // the raw reply to afterModel(), which finishes the turn.
 function decide(ev, stateIn, globalIn, knowledge, cfg) {
+  setAgeButtons(knowledge)
   useContact(knowledge)
   const nowMs = cfg.nowMs
   const adminChatId = cfg.adminChatId ? String(cfg.adminChatId) : ''
@@ -1487,9 +1713,20 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
 
   // mid-signup: the scenario owns the conversation
   if (s.step) {
+    // «давай лучше на лагерь»: checked before the step, because the parser
+    // reads that «давай» as a yes and the course form would take it as consent
+    if (ev.kind === 'text' && switchSignup(res, s, ev.text, cfg.parsed || null, knowledge, nowMs)) return res
     const r = signupStep(s, ev, nowMs, knowledge, cfg.parsed ? cfg.parsed.intent : null)
     res.out.push(...r.out)
     res.effects.push(...r.effects)
+    // the second signup promised by «и на лагерь тоже», once the first is sent
+    if (!s.step && s.nextSignup && r.effects.some((e) => e.type === 'leadSave' && e.isNew)) {
+      const next = s.nextSignup === 'course' ? null : directionById(knowledge, s.nextSignup, nowMs)
+      s.nextSignup = null
+      if (next && next.open !== false) res.out.push(msg(s.chatId, 'А теперь «' + esc(next.title) + '», как договаривались:', inline([[['✍️ Записаться: ' + (next.title.length > 26 ? next.title.slice(0, 25) + '…' : next.title), 'signup:dir:' + next.id]]])))
+      else if (!next) res.out.push(msg(s.chatId, 'А теперь курсы, как договаривались:', inline([[['✍️ Записаться на курс', 'signup:new']]])))
+    }
+    if (!s.step) s.nextSignup = null
     if (r.needsModel) {
       if (r.keepQuestion && s.draft) s.draft.questions = (s.draft.questions || []).concat([r.needsModel.slice(0, 200)])
       return requestModel(res, s, knowledge, nowMs, r.needsModel, { reprompt: r.reprompt, repromptMarkup: r.repromptMarkup, inSignup: true }, cfg.topics)
@@ -1542,6 +1779,12 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
   if (t === BTN.address) { res.out.push(msg(s.chatId, contactsText(), mainKeyboard())); return res }
   if (t === BTN.signup) { runSignupStart(res, s, nowMs, null, knowledge); return res }
   if (t === BTN.human) { humanRequest(res.out, res.effects, s); return res }
+  // ...and «запиши меня куда-нибудь», which gets the list of where it can
+  if (isOrder(t) && (SIGNUP_WORDS.test(t) || wantsNamed(knowledge, t, nowMs))) {
+    s.pendingAge = extractAge(t)
+    s.pendingExtra = ANOTHER_CHILD.test(t)
+    if (beginSignup(res, s, nowMs, knowledge, t, false)) return res
+  }
 
   // Clear intents are caught in code, before the model: free, instant, and
   // they never depend on the model remembering to put a marker. Anything with
@@ -1653,7 +1896,13 @@ function requestModel(res, s, knowledge, nowMs, text, ctx, topics) {
   s.llmDay += 1
   s.llmMinute.push(nowMs)
   g.llm += 1
-  res.model = { messages: buildModelRequest(knowledge, nowMs, s.history, text, topics), userText: String(text).slice(0, CFG.maxInputChars), ctx }
+  const messages = buildModelRequest(knowledge, nowMs, s.history, text, topics)
+  // The model did not know a form was open and kept saying "нажмите кнопку
+  // «Оформить заявку»" under a form that was already there.
+  if (ctx.inSignup && s.step && s.draft) {
+    messages[0] = Object.assign({}, messages[0], { text: messages[0].text + '\n\nСЕЙЧАС: человек заполняет заявку на «' + draftTarget(s.draft).title + '». Ответь только на его сообщение. Если спрашивает, куда его записывают, прямо назови: «' + draftTarget(s.draft).title + '», и добавь, что если нужно другое, достаточно написать, куда. Не пиши про кнопки и форму и не начинай запись заново: продолжение заявки бот покажет сам.' })
+  }
+  res.model = { messages, userText: String(text).slice(0, CFG.maxInputChars), ctx }
   return res
 }
 
@@ -1704,7 +1953,10 @@ function afterModel(res, rawReply, nowMs, knowledge) {
   const thisYear = todayIso(nowMs).slice(0, 4)
   const text = noInventedAllAges(parsed.text).replace(new RegExp('(\\d{1,2}[^\\S\\n]+(?:' + MONTHS_GEN.join('|') + '))[^\\S\\n]+' + thisYear + '(?:[^\\S\\n]*(?:г\\.|года))?', 'g'), '$1')
   const markers = parsed.markers
-  const html = prettyReply(text, knowledge)
+  // «форма откроется автоматически», «и я открою форму»: rule 10 forbids it and
+  // the model still says it now and then. The clause goes; the reply still
+  // counts as an offer below, so the button it meant comes anyway.
+  const html = prettyReply(text.replace(/,?[^\S\n]*(и[^\S\n]+)?(я[^\S\n]+)?(форма[^\S\n]+откроется|откроется[^\S\n]+(короткая[^\S\n]+)?форма|открою[^\S\n]+форму)[^.!?\n]*/gi, ''), knowledge)
   const ctx = res.model.ctx || {}
   const out = []
   const effects = []
@@ -1717,7 +1969,10 @@ function afterModel(res, rawReply, nowMs, knowledge) {
     // One message, not two: a separate re-prompt could arrive after the next
     // turn had already been answered, and the person saw "И сколько лет?"
     // right below "Хорошо, отменил".
-    const body = (html || 'Это уточнит администратор, когда перезвонит.') + (ctx.reprompt ? '\n\n' + ctx.reprompt : '')
+    // the canned replacements below point at a «button below» that a form in
+    // progress does not get, so inside one they are not used
+    const said = parsed.replaced ? 'Записываю прямо здесь, в чате 🐾' : html
+    const body = (said || 'Не совсем понял, напишите, пожалуйста, иначе 🐾') + (ctx.reprompt ? '\n\n' + ctx.reprompt : '')
     out.push(msg(s.chatId, body, ctx.repromptMarkup))
     return { out, effects }
   }

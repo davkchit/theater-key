@@ -125,6 +125,9 @@ async function runCase(lib, knowledge, env, c, state) {
 
 // ------------------------------------------------------------------ checking
 
+// the same phrasings the bot's own detector counts as «не знаю» (lib.js, markers.unknown)
+const DONT_KNOW = /у меня информации нет|информации (об этом |про это )?(у меня )?нет|не подскажу|ничего не известно|в (моих|наших) данных|нет в (моих )?данных|(спросить|спросите|узнать|уточнить) (лучше )?у администратора/i
+
 function checkCase(c, out, forbidden, allowedPrices) {
   const problems = []
   const e = c.expect || {}
@@ -138,7 +141,10 @@ function checkCase(c, out, forbidden, allowedPrices) {
     if (rx(pattern).test(text)) problems.push(`запрещённое «${name}»`)
   }
 
-  // Any rouble sum that is not one of the confirmed course prices is invented.
+  // Any rouble sum that is neither in the theatre's data nor in the list of
+  // confirmed prices is invented. The data counts too: course and ticket prices
+  // change in the admin, and a fixed list here went stale and failed the bot
+  // for naming the real ones.
   // A regexp with a negative lookahead kept misfiring on the digits inside a
   // legitimate "2 500", so the amounts are pulled out and compared as numbers.
   for (const m of text.matchAll(/(\d[\d\s  ]*)\s*(₽|руб)/gi)) {
@@ -152,6 +158,11 @@ function checkCase(c, out, forbidden, allowedPrices) {
   if (e.model === false && out.modelCalls > 0) problems.push('модель вызвана, а не должна')
   for (const s of e.say || []) if (!rx(s).test(text)) problems.push(`нет «${s}»`)
   for (const s of e.never || []) if (rx(s).test(text)) problems.push(`есть лишнее «${s}»`)
+  // «уточнит администратор» in a never-list means "the bot must not say it does
+  // not know": the other ways of saying so count as the same failure
+  if ((e.never || []).some((s) => /уточнит администратор|не знаю/.test(s)) && DONT_KNOW.test(text)) {
+    problems.push('говорит «не знаю» там, где ответ есть в данных')
+  }
   for (const eff of e.effects || []) if (!out.effects.includes(eff)) problems.push(`нет эффекта ${eff}`)
   for (const eff of e.noEffects || []) if (out.effects.includes(eff)) problems.push(`лишний эффект ${eff}`)
   for (const b of e.buttons || []) if (!out.buttons.includes(b)) problems.push(`нет кнопки ${b}`)
@@ -166,6 +177,8 @@ async function main() {
   const redact = DRY ? (s) => s : redactor(env)
   const lib = loadLib()
   const knowledge = buildKnowledge(repoRoot)
+  const inData = [...JSON.stringify(knowledge).matchAll(/(\d[\d\s  ]*)\s*(₽|руб)/gi)].map((m) => m[1].replace(/[^\d]/g, ''))
+  const allowedPrices = [...new Set((spec.allowedPrices || []).concat(inData))]
 
   const LIMIT = Number(flag('limit') || 0)
   const IDS = (flag('ids') || '').split(',').filter(Boolean)
@@ -182,7 +195,7 @@ async function main() {
     let flaky = 0
     for (let attempt = 0; attempt < TRIES; attempt++) {
       const o = await runCase(lib, knowledge, env, c)
-      const p = checkCase(c, o, spec.forbidden, spec.allowedPrices)
+      const p = checkCase(c, o, spec.forbidden, allowedPrices)
       if (p.length && !problems.length && attempt > 0) flaky = attempt
       if (!out || (p.length && !problems.length)) { out = o; problems = p }
       if (p.length) { out = o; problems = p }

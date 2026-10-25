@@ -251,6 +251,145 @@ test('курс записывается по-старому, как до нап�
   t.close()
 })
 
+// ---- moving between forms (a real chat: the course form opened on «запиши
+// меня куда-то», then «давай на солнечную пыль» was read as consent to it and
+// the model kept pointing at a button that was not there)
+
+// a fake parser: each test says how a phrase is read; anything else is a question
+function formRig(labels, reply = 'Ответ.') {
+  const asked = []
+  const t = rig({
+    parser: true,
+    llm: async (body) => {
+      if (body.model === 'p') {
+        const text = body.messages.at(-1).content
+        const [intent, wants] = labels[text] || ['question', false]
+        return { choices: [{ message: { content: JSON.stringify({ intent, wants_action: wants, topics: [], age: 0, show: '' }) } }] }
+      }
+      asked.push(body.messages)
+      return { choices: [{ message: { content: reply } }] }
+    },
+  })
+  // the person's side only: the admin's lead card is sent after the reply
+  const last = () => t.sent.filter((s) => s.method === 'sendMessage' && String(s.payload.chat_id) !== ADMIN).at(-1).payload
+  const lastData = () => ((last().reply_markup || {}).inline_keyboard || []).flat().map((b) => b.callback_data)
+  return { ...t, asked, last, lastData }
+}
+
+test('«запиши меня куда-то» без направления: список, куда можно, без анкеты', async () => {
+  // read as a bare yes, as the real parser sometimes does
+  const t = formRig({ 'запиши ка меня куда то': ['signup', true], 'давай на солнечную пыль': ['confirm', true] }, 'Форма откроется автоматически.')
+  await t.say(40, 'запиши ка меня куда то')
+  assert.equal(t.store.getChat(40).step, null, 'анкета открылась сама: ' + t.last().text)
+  assert.match(t.last().text, /Актёрские курсы/)
+  assert.match(t.last().text, /Солнечная пыль/)
+  await t.say(40, 'давай на солнечную пыль')
+  assert.match(t.last().text, /Солнечная пыль/)
+  assert.ok(t.lastData().includes('consent:yes'), 'нет кнопки «Согласен»: ' + t.last().text)
+  t.close()
+})
+
+test('«хочу записаться» сразу после разговора о лагере открывает лагерь, а не список', async () => {
+  const t = formRig({ 'хочу записаться': ['signup', true] }, 'Лагерь «Солнечная пыль» проходит летом, смена 10 дней 🐾')
+  await t.say(47, 'расскажи про лагерь')
+  await t.say(47, 'хочу записаться')
+  assert.equal(t.store.getChat(47).draft && t.store.getChat(47).draft.dir && t.store.getChat(47).draft.dir.id, 'camp', t.last().text)
+  t.close()
+})
+
+test('в анкете на курсы «давай на солнечную пыль» переключает на лагерь, а не соглашается на курсы', async () => {
+  // the parser read this «давай» as a yes: the trap from the real chat
+  const t = formRig({ 'запишите на курс': ['signup', true], 'давай на солнечную пыль': ['confirm', true] }, 'Нажмите кнопку «Оформить заявку», откроется форма.')
+  await t.say(41, 'запишите на курс')
+  assert.match(t.last().text, /Актёрские курсы/, 'анкета не говорит, куда записывает')
+  await t.say(41, 'а куда ты меня заполняешь')
+  assert.ok(t.lastData().includes('consent:yes'), 'под ответом нет кнопок «Согласен / Отмена»: ' + t.last().text)
+  assert.ok(!/Чтобы продолжить запись/.test(t.last().text), 'осталось напоминание текстом')
+  assert.ok(/заполняет заявку на «Актёрские курсы»/.test(t.asked.at(-1)[0].content), 'модель не знает, что анкета открыта')
+  await t.say(41, 'давай на солнечную пыль')
+  const st = t.store.getChat(41)
+  assert.equal(st.step, 'consent')
+  assert.equal(st.draft.dir && st.draft.dir.id, 'camp', 'анкета осталась на курсах')
+  assert.match(t.last().text, /меняем[\s\S]*Оформлю заявку: <b>Лагерь «Солнечная пыль»<\/b>/)
+  assert.ok(t.lastData().includes('consent:yes'))
+  t.close()
+})
+
+test('смена анкеты посреди заполнения: имя и телефон второй раз не спрашиваются', async () => {
+  const t = formRig({ 'запишите на курс': ['signup', true], 'нет, лучше на лсд': ['signup', true] })
+  await t.say(42, 'запишите на курс')
+  await t.tap(42, 'consent:yes')
+  await t.say(42, 'Анна')
+  await t.say(42, '9')
+  await t.say(42, '89061234567')
+  assert.equal(t.store.getChat(42).step, 'confirm')
+  await t.say(42, 'нет, лучше на лсд')
+  // the lab asks only for the name and the phone, both already given
+  assert.equal(t.store.getChat(42).step, 'dir_confirm', t.last().text)
+  assert.match(t.last().text, /Лаборатория/)
+  await t.tap(42, 'confirm:yes')
+  const lead = t.store.db.prepare('SELECT * FROM leads').get()
+  assert.ok(lead, 'заявка не сохранена')
+  assert.match(lead.direction, /ЛСД/)
+  assert.equal(lead.name, 'Анна')
+  assert.equal(lead.phone, '+7 906 123-45-67')
+  t.close()
+})
+
+test('с лагеря обратно на курсы: согласие уже дано, сразу возраст по имени', async () => {
+  const t = formRig({ 'запишите на лагерь': ['signup', true], 'хочу лучше на курсы': ['signup', true] })
+  await t.say(43, 'запишите на лагерь')
+  await t.tap(43, 'consent:yes')
+  await t.say(43, 'Олег')
+  await t.say(43, 'хочу лучше на курсы')
+  assert.equal(t.store.getChat(43).step, 'age', t.last().text)
+  assert.match(t.last().text, /Олег, сколько лет/)
+  t.close()
+})
+
+test('вопрос про другое направление посреди анкеты её не переключает', async () => {
+  const t = formRig({ 'запишите на курс': ['signup', true] })
+  await t.say(44, 'запишите на курс')
+  await t.say(44, 'а в лагере сколько стоит?')
+  const st = t.store.getChat(44)
+  assert.equal(st.step, 'consent')
+  assert.ok(!st.draft.dir, 'анкета переключилась от вопроса')
+  assert.ok(t.lastData().includes('consent:yes'))
+  t.close()
+})
+
+test('«и на лагерь тоже»: сначала курсы до конца, потом кнопка записи в лагерь', async () => {
+  const t = formRig({ 'запишите на курс': ['signup', true], 'и на лагерь тоже запишите': ['signup', true] })
+  await t.say(45, 'запишите на курс')
+  await t.tap(45, 'consent:yes')
+  await t.say(45, 'и на лагерь тоже запишите')
+  assert.equal(t.store.getChat(45).step, 'name', 'курсовая анкета сбилась')
+  assert.match(t.last().text, /сначала закончим/)
+  await t.say(45, 'Анна')
+  await t.say(45, '9')
+  await t.say(45, '89061234567')
+  await t.tap(45, 'confirm:yes')
+  assert.ok(t.lastData().includes('signup:dir:camp'), 'после курсов нет кнопки лагеря: ' + t.last().text)
+  t.close()
+})
+
+test('выйти из анкеты можно на любом шаге: кнопкой и словами', async () => {
+  const t = formRig({ 'запишите на лагерь': ['signup', true], 'забей': ['cancel', true] })
+  await t.say(46, 'запишите на лагерь')
+  await t.tap(46, 'signup:cancel')
+  assert.equal(t.store.getChat(46).step, null, 'кнопка «Отмена» не сработала')
+  await t.say(46, 'запишите на лагерь')
+  await t.tap(46, 'consent:yes')
+  await t.say(46, 'Олег')
+  await t.say(46, 'забей')
+  assert.equal(t.store.getChat(46).step, null, '«забей» не отменил')
+  await t.say(46, 'запишите на лагерь')
+  await t.tap(46, 'consent:yes')
+  await t.say(46, 'отмена')
+  assert.equal(t.store.getChat(46).step, null, '«отмена» не сработала')
+  t.close()
+})
+
 // ---- stage 3: leads from the site, mail, CSV
 
 function siteRig(know = knowledge) {
