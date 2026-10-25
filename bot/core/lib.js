@@ -79,6 +79,13 @@ function mainKeyboard() {
   }
 }
 
+// While a form is open the way out is always on screen: «Отмена» in place of
+// the menu, in Telegram's keyboard and as the chip above the site chat's input.
+// A woman wrote «да не хочу» at «как вас зовут?» and it became her name.
+function cancelKeyboard() {
+  return { keyboard: [[{ text: 'Отмена' }]], resize_keyboard: true, is_persistent: true }
+}
+
 function contactKeyboard() {
   return {
     keyboard: [[{ text: '📱 Поделиться контактом', request_contact: true }], [{ text: 'Отмена' }]],
@@ -761,7 +768,7 @@ function stepUnderstood(s, text, knowledge, nowMs) {
   // «отмена», «стоп»: the way out of a form never depends on a model
   if (CANCEL_RE.test(t)) return true
   if (!t || namedTarget(knowledge, t, nowMs)) return false
-  const plainName = t.split(/\s+/).length <= 3 && /^[a-zA-Zа-яА-ЯёЁ\s-]+$/.test(t) && !NOT_A_NAME.test(t) && !smallTalkReply(t, nowMs)
+  const plainName = t.split(/\s+/).length <= 3 && /^[a-zA-Zа-яА-ЯёЁ\s-]+$/.test(t) && !NOT_A_NAME.test(t) && !REFUSAL.test(t) && !smallTalkReply(t, nowMs)
   if (s.step === 'consent') return CONSENT_YES_RE.test(t) || CONSENT_NO_RE.test(t)
   if (s.step === 'name') return plainName
   if (s.step === 'age' || s.step === 'extra_age') return /^\d{1,3}(\s*(лет|год|года))?[.!]?$/i.test(t) || /^взросл/i.test(t) || KID_RANGES.indexOf(t) !== -1
@@ -984,6 +991,8 @@ function hasOpenLead(state, nowMs) {
 
 const ANOTHER_CHILD = /(доч|сын|ребён|ребен|ещё|еще|втор|тоже|брат|сестр|двоих|обоих)/i
 
+// «не хочу», «да нет», «неа», «нетуу»: a refusal, never a name
+const REFUSAL = /^(да[\s,]+)?(не\s+\S|нет(у+)?(?![а-яё])|неа(?![а-яё])|ни за что|отстань)/i
 const NOT_A_NAME = /^(да|нет|ок|окей|ага|угу|хорошо|ладно|хочу|давай(те)?|запис\S*|заявк\S*|курс\S*|не знаю|мама|папа|родитель|я|здесь|тут|[^a-zA-Zа-яА-ЯёЁ]+)[.!,)]*$/i
 
 // "отмена", "отменить заявку", "передумал", "не надо"
@@ -1302,7 +1311,7 @@ function recentTarget(knowledge, s, nowMs) {
 function stepPrompt(s, knowledge) {
   const d = s.draft
   if (s.step === 'consent') return d.dir ? dirConsentMsg(s, d.dir, '') : courseConsentMsg(s, '')
-  if (s.step === 'name') return msg(s.chatId, 'Как вас зовут?', { remove_keyboard: true })
+  if (s.step === 'name') return msg(s.chatId, 'Как вас зовут?', cancelKeyboard())
   if (s.step === 'age') return msg(s.chatId, esc(d.name) + ', сколько лет? Если записываете ребёнка, напишите его возраст, а если себя, то свой.', ageKeyboard())
   if (s.step === 'phone') return msg(s.chatId, 'Остался телефон. Нажмите кнопку ниже, номер подставится сам. Или напишите номер сообщением.', contactKeyboard())
   if (s.step === 'confirm') return courseSummary(s, knowledge)
@@ -1395,7 +1404,7 @@ function courseResume(s, nowMs) {
     return msg(s.chatId, esc(s.draft.name) + ', сколько лет? Если записываете ребёнка, напишите его возраст, а если себя, то свой.', ageKeyboard())
   }
   s.step = 'name'
-  return msg(s.chatId, 'Как вас зовут?', { remove_keyboard: true })
+  return msg(s.chatId, 'Как вас зовут?', cancelKeyboard())
 }
 
 function courseSummary(s, knowledge) {
@@ -1415,7 +1424,7 @@ function dirQuestion(state) {
   const q = state.draft.qs[state.draft.i]
   if (q.kind === 'choice') return msg(state.chatId, esc(q.ask), inline((q.options || []).map((o, i) => [[o, 'dirc:' + i]])))
   if (q.kind === 'phone') return msg(state.chatId, esc(q.ask), contactKeyboard())
-  return msg(state.chatId, esc(q.ask), { remove_keyboard: true })
+  return msg(state.chatId, esc(q.ask), cancelKeyboard())
 }
 
 // After the consent: name first, then the direction's own questions, then the
@@ -1517,7 +1526,7 @@ function dirStep(state, ev, nowMs) {
     if (looksLikeQuestion(text)) return again()
     if (q.kind === 'name') {
       if (text.length > 40 || /\d/.test(text)) return again()
-      if (smallTalkReply(text, nowMs) || NOT_A_NAME.test(text)) { out.push(msg(state.chatId, 'Мяу, привет! 🐾 А как вас зовут? Напишите, пожалуйста, имя.')); return { out, effects } }
+      if (smallTalkReply(text, nowMs) || NOT_A_NAME.test(text) || REFUSAL.test(text.trim())) { out.push(msg(state.chatId, 'Мяу, привет! 🐾 А как вас зовут? Напишите, пожалуйста, имя.')); return { out, effects } }
       value = text.replace(/[.!,]+$/, '')
     } else if (q.kind === 'number') {
       if (!/^\d{1,4}$/.test(text.trim())) { out.push(msg(state.chatId, 'Напишите число цифрами.')); return { out, effects } }
@@ -1617,7 +1626,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
     }
     // "привет", "да", "ок", "хочу" typed at this step are replies to the bot,
     // not names -- one of them once landed in a real lead as the parent's name
-    if (smallTalkReply(text, nowMs) || NOT_A_NAME.test(text)) {
+    if (smallTalkReply(text, nowMs) || NOT_A_NAME.test(text) || REFUSAL.test(text.trim())) {
       out.push(msg(state.chatId, 'Мяу, привет! 🐾 А как вас зовут? Напишите, пожалуйста, имя.'))
       return { out, effects }
     }
@@ -1720,7 +1729,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
     if (ev.kind === 'callback' && ev.data === 'confirm:edit') {
       state.step = 'name'; state.stepAt = nowMs
       state.draft = { questions: state.draft.questions || [] }
-      out.push(msg(state.chatId, 'Давайте заново. Как вас зовут?', { remove_keyboard: true }))
+      out.push(msg(state.chatId, 'Давайте заново. Как вас зовут?', cancelKeyboard()))
       return { out, effects }
     }
     if (text) return { out, effects, needsModel: text, keepQuestion: true, reprompt: 'Проверьте данные выше и нажмите «Да, всё верно» или «Исправить».' }

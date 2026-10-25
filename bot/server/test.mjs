@@ -495,6 +495,27 @@ test('разборщик лёг: смена анкеты всё равно ра�
   t.close()
 })
 
+test('«да не хочу» на шаге имени: отказ, а не имя; «Отмена» всегда внизу', async () => {
+  const t = formRig({ 'запишите на курс': ['signup', 'course'], 'да не хочу': ['decline'] })
+  await t.say(57, 'запишите на курс')
+  await t.tap(57, 'consent:yes')
+  // the name question comes with «Отмена» in place of the menu
+  const kb = t.last().reply_markup.keyboard.flat().map((b) => b.text)
+  assert.equal(JSON.stringify(kb), JSON.stringify(['Отмена']))
+  await t.say(57, 'да не хочу')
+  assert.equal(t.store.getChat(57).step, null, 'анкета не отменилась')
+  assert.ok(!t.store.db.prepare('SELECT * FROM leads').get(), 'появилась заявка')
+  // with the parser down the code still does not take it for a name
+  const t2 = formRig(null)
+  await t2.say(58, 'запишите на курс')
+  await t2.tap(58, 'consent:yes')
+  await t2.say(58, 'да не хочу')
+  const st = t2.store.getChat(58)
+  assert.ok(!st.step || !(st.draft && st.draft.name), '«да не хочу» записалось как имя')
+  t.close()
+  t2.close()
+})
+
 test('выйти из анкеты можно на любом шаге: кнопкой и словами', async () => {
   const t = formRig({ 'запишите на лагерь': ['signup', 'camp'], 'забей': ['cancel'] })
   await t.say(46, 'запишите на лагерь')
