@@ -77,8 +77,22 @@ export const heroShows: HomeShow[] = nearestPerShow
   .filter((h): h is HomeShow => h !== null)
   .slice(0, 4)
 
-/** "Ближайшие спектакли": four different shows, photo or not. */
-export const upcomingCards: HomeShow[] = nearestPerShow.slice(0, 4)
+/** "Ближайшие спектакли": four cards, photo or not. Different shows first; when
+ *  the afisha has fewer than four, the next dates fill the row (a second
+ *  «Симон» two weeks later), so the row never shows three of four. */
+const firstFour = nearestPerShow.slice(0, 4)
+export const upcomingCards: HomeShow[] = firstFour
+  .concat(
+    upcomingAfisha
+      .filter((item) => !firstFour.some((h) => h.item === item))
+      .slice(0, Math.max(0, 4 - firstFour.length))
+      .map((item) => {
+        const show = byTitle(item.title)
+        return { item, show, photo: show?.photo ?? '', ticketUrl: item.ticketUrl || show?.ticketUrl || TICKETS_URL }
+      }),
+  )
+  // back in date order: the afisha's order, which is by date
+  .sort((a, b) => upcomingAfisha.indexOf(a.item) - upcomingAfisha.indexOf(b.item))
 
 /** A photo from public/uploads/gallery by its file name («lager-1»). Straight
  *  from the folder, not from the admin's «Галерея» list: that list is the

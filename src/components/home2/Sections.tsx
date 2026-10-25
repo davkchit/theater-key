@@ -98,12 +98,11 @@ export function UpcomingShows() {
       <Torn color="text-paper" seed={23} />
       <div className={`${WRAP} pt-16 pb-20 md:pt-24 md:pb-28`}>
         <SectionHead title="Ближайшие спектакли" to="/afisha" link="Вся афиша" />
-        {/* three shows on the afisha fill the row in three columns, not three of four */}
-        <div className={`no-scrollbar -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-5 overflow-x-auto px-4 pb-2 sm:grid sm:grid-cols-2 sm:gap-x-0 sm:gap-y-10 sm:overflow-visible sm:px-0 ${upcomingCards.length === 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
+        <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-5 overflow-x-auto px-4 pb-2 sm:grid sm:grid-cols-2 sm:gap-x-0 sm:gap-y-10 sm:overflow-visible sm:px-0 lg:grid-cols-4">
           {upcomingCards.map((h, n) => {
             return (
               <Reveal
-                key={h.item.title}
+                key={h.item.title + h.item.day + h.item.mon}
                 index={n}
                 className="sm:border-ink/15 flex w-[78vw] max-w-[340px] flex-shrink-0 snap-start flex-col sm:w-auto sm:max-w-none sm:border-l sm:px-5 sm:pb-2 sm:odd:border-l-0 lg:[&:nth-child(3)]:border-l"
               >
