@@ -373,6 +373,29 @@ test('«и на лагерь тоже»: сначала курсы до конц
   t.close()
 })
 
+test('напоминание администратору только на «не перезвонили», не на любую жалобу', async () => {
+  const t = formRig({
+    'запишите на курс': ['signup', true],
+    'ты же отменил': ['complaint', false],
+    'чето тяжело с тобой': ['complaint', false],
+    'мне до сих пор не перезвонили': ['complaint', false],
+  })
+  await t.say(48, 'запишите на курс')
+  await t.tap(48, 'consent:yes')
+  await t.say(48, 'Анна')
+  await t.say(48, '9')
+  await t.say(48, '89061234567')
+  await t.tap(48, 'confirm:yes')
+  const nudges = () => t.store.db.prepare('SELECT nudges FROM leads').get().nudges
+  await t.say(48, 'ты же отменил')
+  await t.say(48, 'чето тяжело с тобой')
+  assert.equal(String(nudges()), '0', 'администратору ушло ложное «ждёт звонка»')
+  assert.ok(!/напомнил/.test(t.last().text), t.last().text)
+  await t.say(48, 'мне до сих пор не перезвонили')
+  assert.equal(String(nudges()), '1', 'настоящее «не перезвонили» не дошло')
+  t.close()
+})
+
 test('выйти из анкеты можно на любом шаге: кнопкой и словами', async () => {
   const t = formRig({ 'запишите на лагерь': ['signup', true], 'забей': ['cancel', true] })
   await t.say(46, 'запишите на лагерь')

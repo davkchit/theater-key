@@ -1778,7 +1778,7 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
   if (t === BTN.courses) { res.out.push(msg(s.chatId, coursesText(knowledge), inline([[['✍️ Записаться', 'signup:start']]]))); return res }
   if (t === BTN.address) { res.out.push(msg(s.chatId, contactsText(), mainKeyboard())); return res }
   if (t === BTN.signup) { runSignupStart(res, s, nowMs, null, knowledge); return res }
-  if (t === BTN.human) { humanRequest(res.out, res.effects, s); return res }
+  if (t === BTN.human) { humanRequest(res.out, res.effects, s, t); return res }
   // ...and «запиши меня куда-нибудь», which gets the list of where it can
   if (isOrder(t) && (SIGNUP_WORDS.test(t) || wantsNamed(knowledge, t, nowMs))) {
     s.pendingAge = extractAge(t)
@@ -1828,7 +1828,7 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
         return res
       }
     }
-    if (parsed.intent === 'complaint' || (parsed.intent === 'human' && parsed.wantsAction)) { humanRequest(res.out, res.effects, s); return res }
+    if (parsed.intent === 'complaint' || (parsed.intent === 'human' && parsed.wantsAction)) { humanRequest(res.out, res.effects, s, t); return res }
     // everything else is answered, with the button that matches what was asked
     const offer = parsed.intent === 'signup' || parsed.intent === 'add_child' ? (hasOpenLead(s, nowMs) ? 'extra' : 'signup') : null
     // Four pages fit in the prompt whole. Routing saved about a rouble a question
@@ -1859,18 +1859,28 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
     if (beginSignup(res, s, nowMs, knowledge, t, false)) return res
   }
   if (/(^|\s)(не|никто\s+не)\s+(по|пере)?звон/i.test(t) || /^(позовите|позвать|дайте)\s+(админ|человек|менеджер|оператор)/i.test(t)) {
-    humanRequest(res.out, res.effects, s)
+    humanRequest(res.out, res.effects, s, t)
     return res
   }
 
   return requestModel(res, s, knowledge, nowMs, t, {}, cfg.topics)
 }
 
-function humanRequest(out, effects, s) {
-  if (s.lastLead && !s.lastLead.cancelled) {
+// Only these words mean "I am waiting for the call". The administrator used to
+// get a "напоминает о себе" for any complaint at all: «ты же отменил» and «чето
+// тяжело с тобой» each sent one, about a lead nobody was waiting on.
+const WAITING_CALL = /(не|никто\s+не)\s+(по|пере)?звон|(не|никто\s+не)\s+связ|жд(у|ём|ем)\s+(звонк|ответ|связ)|когда\s+(мне\s+|нам\s+)?(позвон|перезвон|свяж)|до\s+сих\s+пор\s+(не|никто)/i
+
+function humanRequest(out, effects, s, text) {
+  if (s.lastLead && !s.lastLead.cancelled && WAITING_CALL.test(String(text || ''))) {
     s.lastLead.nudges = (s.lastLead.nudges || 0) + 1
     effects.push(leadSaveEffect(s.lastLead, '⏰ Напоминает о себе, ждёт звонка'))
     out.push(msg(s.chatId, 'Вижу вашу заявку и уже напомнил администратору, что вы ждёте звонка. Звонят в рабочее время: ' + esc(CONTACT.hours) + '.\n\nЕсли не хотите ждать, позвоните сами: ' + esc(CONTACT.phone) + '.', mainKeyboard()))
+    return
+  }
+  // a lead is already there: no second one offered
+  if (s.lastLead && !s.lastLead.cancelled) {
+    out.push(msg(s.chatId, 'Администратор на связи по телефону: ' + esc(phoneWithHours()) + '.', mainKeyboard()))
     return
   }
   out.push(msg(s.chatId, 'Администратор на связи по телефону: ' + esc(phoneWithHours()) + '.\n\nИли оставьте заявку, и вам перезвонят.', inline([[['✍️ Оставить заявку', 'signup:start']]])))
