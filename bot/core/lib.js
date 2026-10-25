@@ -56,6 +56,12 @@ function showTime(a) {
 
 const WD_SHORT_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
 
+// «23 октября», in Moscow time
+function dayMonth(ms) {
+  const d = new Date(Number(ms) + 3 * 3600e3)
+  return d.getUTCDate() + ' ' + MONTHS_GEN[d.getUTCMonth()]
+}
+
 function ruDate(iso) {
   const d = new Date(iso + 'T12:00:00Z')
   return { day: d.getUTCDate(), mon: MONTHS_GEN[d.getUTCMonth()], wd: WEEKDAYS[d.getUTCDay()] }
@@ -585,30 +591,41 @@ const PARSER_TOPICS = {
   contacts: 'адрес, как добраться, телефоны, часы работы, почта, соцсети',
 }
 
-const PARSER_INTENTS = {
-  question: 'спрашивает факт о театре: что идёт, сколько стоит, где вы, про что спектакль',
-  signup: 'речь о записи: на курсы в студии или на направление (лагерь, лаборатория, фестиваль, квест, карнавал и другие из данных театра): «хочу записаться», «запишите дочку», «как записаться?», «давай на лагерь», «го на фестиваль», «лучше на курсы». «Давай» с названием, куда записать, это signup, а не confirm. Купить билет на спектакль — это НЕ signup, это question с темой tickets. И «сколько стоит?», «есть ли пробное?», «в какую группу?» — тоже question: человек собирает сведения',
-  add_child: 'хочет добавить ещё одного человека к уже оставленной заявке',
-  cancel: 'отказывается от записи: «отмена», «стоп», «не надо», «передумал», «забей», «потом», «проехали». Во время заполнения формы любой такой отказ — это cancel',
-  small_talk: 'приветствие, благодарность, прощание, болтовня. Сюда же «ты бот или человек?» — это любопытство, а не просьба позвать сотрудника',
-  complaint: 'жалуется: не перезвонили, не дозвонился, недоволен',
-  human: 'просит СОЕДИНИТЬ его с живым сотрудником: «позовите администратора», «дайте человека»',
-  confirm: 'соглашается или подтверждает: «согласен», «да», «ок», «верно», «давай», «угу». Только как ответ на заданный вопрос, не сам по себе',
-  decline: 'отказывается от предложенного: «не согласен», «нет», «не хочу», «не буду». Это не отмена всей записи, а ответ «нет» на вопрос',
-  other: 'ничего из перечисленного: посторонние темы, бессмыслица, набор букв',
+// The parser does not label the message any more, it picks what to DO, from a
+// closed list, seeing the state of the chat: the open form, the leads sent, and
+// the directions in the admin by id. The code then checks that the action is
+// allowed right now and carries it out. The label it replaced ("signup",
+// "complaint") left the details to keyword lists, and every new wording slipped
+// past them: «курс или мероприятия» opened the course form, «ты же отменил»
+// sent the administrator a "waiting for a call".
+const PARSER_ACTIONS = {
+  answer: 'задаёт вопрос или говорит о театре, нужен ответ по данным: что идёт, сколько стоит, где вы, как проходят занятия, про заявку («ты отменил?», «заявка ушла?»)',
+  smalltalk: 'приветствие, благодарность, прощание, «как дела», комплимент, болтовня без вопроса',
+  unclear: 'смысла не разобрать: набор букв, обрывок',
+  signup: 'хочет записаться или записать кого-то: «запишите», «хочу на лагерь», «давай на курсы», «го в ЛСД», «можно ребёнка к вам?», «на что можно записаться?». target: куда именно; если не сказано или названо несколько вариантов через «или», target пустой',
+  signup_also: 'во время заполнения анкеты просит записать ЕЩЁ и в другое место, вдобавок к текущему: «и на лагерь тоже»',
+  form_answer: 'отвечает на вопрос анкеты: имя, возраст, телефон, вариант ответа',
+  confirm: 'соглашается в ответ на вопрос бота: «да», «согласен», «ок», «давай» (без указания, куда)',
+  decline: 'отвечает «нет» на вопрос бота: «нет», «не согласен», «не хочу»',
+  cancel: 'хочет прекратить запись или отменить заявку: «отмена», «стоп», «передумал», «забей», «не надо»',
+  add_child: 'хочет добавить ещё одного ребёнка к уже отправленной заявке на курсы',
+  human: 'просит живого человека или телефон администратора, жалуется на бота или на то, что не перезвонили',
 }
 
-function parserSchema() {
+// Which targets exist right now: the courses and every direction the admin
+// shows, by id. The schema only lets the model name one of these.
+function parserTargets(knowledge, nowMs) {
+  return ['', 'course'].concat(visibleDirections(knowledge, nowMs).map((d) => String(d.id)))
+}
+
+function parserSchema(knowledge, nowMs) {
   return {
     name: 'turn',
     schema: {
       type: 'object',
       properties: {
-        intent: { type: 'string', enum: Object.keys(PARSER_INTENTS) },
-        // The distinction every wrong turn today came down to: «запишите меня»
-        // is an order, «а заявки делаешь?» is a question. Acting on the second
-        // as if it were the first is what hijacked the conversation.
-        wants_action: { type: 'boolean' },
+        action: { type: 'string', enum: Object.keys(PARSER_ACTIONS) },
+        target: { type: 'string', enum: parserTargets(knowledge, nowMs) },
         // maxItems is load-bearing: without it the smaller model loops on the
         // array and repeats topics until it runs out of output tokens
         topics: { type: 'array', items: { type: 'string', enum: Object.keys(PARSER_TOPICS) }, maxItems: 3 },
@@ -617,50 +634,74 @@ function parserSchema() {
         age: { type: 'integer' },
         show: { type: 'string' },
       },
-      required: ['intent', 'wants_action', 'topics', 'age', 'show'],
+      required: ['action', 'target', 'topics', 'age', 'show'],
       additionalProperties: false,
     },
   }
 }
 
-function parserMessages(userText, history, hasOpenLead, step, lastTopics) {
+// What the parser is told about the chat. No names and no phones: only what the
+// form is for, its step, and what happened to the leads.
+function chatStateLines(s, nowMs) {
+  const lines = []
+  if (s && s.step && s.draft) {
+    const step = { consent: 'ждём согласия на обработку данных', name: 'спросили имя', age: 'спросили возраст', phone: 'спросили телефон', confirm: 'просим проверить заявку', dir_field: 'задан вопрос анкеты', dir_confirm: 'просим проверить заявку', extra_age: 'спросили возраст ещё одного ребёнка' }[s.step] || s.step
+    lines.push('Сейчас открыта анкета на «' + draftTarget(s.draft).title + '» (target ' + draftTarget(s.draft).id + '), шаг: ' + step + '.')
+  } else lines.push('Анкета сейчас не открыта.')
+  if (s && s.formCancelledAt && nowMs - s.formCancelledAt < CFG.offerTtlMs) lines.push('Только что человек отменил анкету на «' + (s.formCancelledTitle || 'запись') + '», она никуда не ушла.')
+  // chats from before the log kept only the last course lead
+  const log = (s && s.leadLog && s.leadLog.length) ? s.leadLog : (s && s.lastLead ? [{ title: COURSE_TARGET.title, at: s.lastLead.at || 0, cancelled: Boolean(s.lastLead.cancelled) }] : [])
+  for (const l of log.slice(-3)) {
+    lines.push('Из этого чата отправлена заявка на «' + l.title + '» ' + dayMonth(l.at) + (l.cancelled ? ', потом отменена.' : ', действует.'))
+  }
+  return lines
+}
+
+function parserMessages(userText, s, knowledge, nowMs) {
+  const dirs = visibleDirections(knowledge, nowMs)
   const sys = [
-    'Ты размечаешь одно сообщение посетителя театра «Ключ». Ты НЕ отвечаешь человеку — только описываешь его сообщение структурой.',
+    'Ты выбираешь, что боту театра «Ключ» сделать с одним сообщением посетителя. Ты НЕ отвечаешь человеку — только выбираешь действие.',
     '',
-    'intent — что человек делает:',
-    ...Object.keys(PARSER_INTENTS).map((k) => '- ' + k + ': ' + PARSER_INTENTS[k]),
+    'action, одно из:',
+    ...Object.keys(PARSER_ACTIONS).map((k) => '- ' + k + ': ' + PARSER_ACTIONS[k]),
     '',
-    'topics — какие разделы справочника нужны, чтобы ответить. Не больше трёх, только необходимые. Если сообщение не вопрос — пустой список.',
+    'target — куда записать, только для signup и signup_also, иначе пустая строка:',
+    '- course: актёрские курсы (студия, группы по возрасту)',
+    ...dirs.map((d) => '- ' + d.id + ': ' + d.title + (d.open === false ? ' (запись сейчас закрыта)' : '')),
+    '',
+    'Примеры:',
+    '- «запишите на курс», «хочу на курсы», «запишите дочку, ей 7» → signup, course',
+    '- «го в лагерь», «давай на солнечную пыль» → signup, id лагеря',
+    '- «хочу записаться», «запиши меня куда-нибудь» → signup, target пустой',
+    '- «а можно к вам записаться?», «как записаться?», «на что можно записаться?» → answer: это вопрос, а не просьба',
+    '- «хочу на курс какой-нибудь или мероприятия» → signup, target пустой: названо несколько вариантов',
+    '- в анкете: «нет», «нетуу», «неа», «не хочу» → decline; «отмена», «забей», «передумал» → cancel',
+    '- «ты отменил заявку?», «моя заявка ушла?» → answer',
+    '- «мне до сих пор не перезвонили», «позовите человека» → human',
+    'Купить билет на спектакль — это answer, не signup.',
+    '«Сколько стоит курс?», «есть ли пробное?», «какая группа подойдёт?» — answer: человек собирает сведения.',
+    'Если человек в одном сообщении прямо просит записать («запишите дочку») и ещё что-то спрашивает, выбирай signup. Если он только спрашивает, можно ли записаться, это answer.',
+    '',
+    'СОСТОЯНИЕ ЧАТА:',
+    ...chatStateLines(s, nowMs),
+    '',
+    'topics — какие разделы справочника нужны для ответа, не больше трёх. Если сообщение не вопрос — пустой список.',
     ...Object.keys(PARSER_TOPICS).map((k) => '- ' + k + ': ' + PARSER_TOPICS[k]),
     '',
-    'age — возраст числом, ТОЛЬКО если он назван в самом сообщении. Если возраст не назван — ставь 0. Не угадывай.',
-    'show — название спектакля, если упомянуто, иначе пустая строка.',
-    '',
-    'wants_action — ПРОСИТ СДЕЛАТЬ прямо сейчас (оформи, запиши, отмени, добавь) → true.',
-    'Если человек СПРАШИВАЕТ — «а заявки делаешь?», «можно ли записаться?», «а как отменить?» — это false, даже если тема та же.',
-    'Повелительное наклонение и «хочу/давайте» → true. Вопросительная форма → почти всегда false.',
-    '',
-    hasOpenLead ? 'У этого человека уже есть незакрытая заявка.' : 'Заявки у этого человека сейчас нет — значит intent add_child и cancel почти наверняка не подходят.',
-    step ? 'Сейчас идёт заполнение формы, шаг: ' + step + '.' : '',
+    'age — возраст числом, ТОЛЬКО если он назван в самом сообщении, иначе 0. show — название спектакля, если упомянуто, иначе пустая строка.',
     // "а ещё что-то есть?" went to the afisha because nothing told the parser
     // what the previous question had been about
-    (lastTopics && lastTopics.length) ? 'Предыдущий вопрос был про: ' + lastTopics.join(', ') + '. Если это уточнение к нему — верни те же темы, добавив нужные.' : '',
-  ].filter(Boolean).join('\n')
+    (s && s.lastTopics && s.lastTopics.length) ? 'Предыдущий вопрос был про: ' + s.lastTopics.join(', ') + '. Если это уточнение к нему — верни те же темы.' : '',
+  ].filter((x) => x !== null && x !== undefined).join('\n')
 
   const msgs = [{ role: 'system', content: sys }]
-  for (const h of (history || []).slice(-2)) msgs.push({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.text).slice(0, 300) })
+  for (const h of ((s && s.history) || []).slice(-2)) msgs.push({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.text).slice(0, 300) })
   msgs.push({ role: 'user', content: String(userText).slice(0, CFG.maxInputChars) })
   return msgs
 }
 
-// What the code is willing to act on. A label is probabilistic; whether it is
-// allowed in the current state is not. This gate is what keeps a misread
-// "отмените" from cancelling a lead that does not exist.
-function intentAllowed(intent, state, nowMs) {
-  if (intent === 'add_child') return hasOpenLead(state, nowMs)
-  if (intent === 'cancel') return Boolean(state.step) || Boolean(state.lastLead && !state.lastLead.cancelled)
-  return true
-}
+// the old labels, which signupStep and the fallback still speak
+const ACTION_INTENT = { answer: 'question', smalltalk: 'small_talk', unclear: 'other', signup: 'signup', signup_also: 'signup', form_answer: null, confirm: 'confirm', decline: 'decline', cancel: 'cancel', add_child: 'add_child', human: 'human' }
 
 function parseTurnReply(raw, sourceText) {
   let text = String(raw == null ? '' : raw).trim()
@@ -670,8 +711,11 @@ function parseTurnReply(raw, sourceText) {
   let v = null
   try { v = JSON.parse(text) } catch (e) { return null }
   if (!v || typeof v !== 'object') return null
-  const intent = Object.prototype.hasOwnProperty.call(PARSER_INTENTS, v.intent) ? v.intent : null
-  if (!intent) return null
+  const action = Object.prototype.hasOwnProperty.call(PARSER_ACTIONS, v.action) ? v.action : null
+  if (!action) return null
+  const intent = ACTION_INTENT[action]
+  // a target is a name the code checks against the admin, never trusted as is
+  const target = typeof v.target === 'string' ? v.target.trim().slice(0, 60) : ''
   const topics = Array.isArray(v.topics) ? v.topics.filter((t) => Object.prototype.hasOwnProperty.call(PARSER_TOPICS, t)).slice(0, 3) : []
   // The cheaper model invents ages -- it answered "1" to «привет». An age is
   // only accepted when that exact number is actually present in the message,
@@ -682,8 +726,57 @@ function parseTurnReply(raw, sourceText) {
     if (seen.indexOf(String(age)) === -1) age = null
   }
   const show = typeof v.show === 'string' && v.show.trim() ? v.show.trim().slice(0, 80) : null
-  const wantsAction = v.wants_action === true
-  return { intent, wantsAction, topics, age, show }
+  const wantsAction = ['signup', 'signup_also', 'cancel', 'add_child', 'human', 'confirm'].indexOf(action) !== -1
+  return { action, target, intent, wantsAction, topics, age, show }
+}
+
+// The parser's target, checked: the courses, or a direction the admin shows
+// now. Anything else -- a stale id, an invented one -- counts as not said.
+function checkedTarget(knowledge, target, nowMs) {
+  if (target === 'course') return COURSE_TARGET
+  return target ? directionById(knowledge, target, nowMs) : null
+}
+
+// The parser sometimes leaves the target empty on a plain «запишите на курс».
+// When the message names exactly one thing from the admin and offers no
+// alternatives («или»), that thing is the target: a check against the data,
+// not a guess at what the person meant.
+function singleNamed(knowledge, text, nowMs) {
+  const t = String(text || '')
+  if (/(^|[^а-яё])или(?![а-яё])/i.test(t)) return null
+  const low = t.toLowerCase().replace(/ё/g, 'е')
+  const found = visibleDirections(knowledge, nowMs).filter((d) => {
+    const words = String(d.title).toLowerCase().replace(/ё/g, 'е').split(/[^а-яa-z0-9]+/).filter((w) => w.length >= 5)
+    return words.some((w) => low.indexOf(w.slice(0, Math.max(5, w.length - 2))) !== -1) || (DIR_TYPE_RE[d.type] && DIR_TYPE_RE[d.type].test(low))
+  })
+  if (/курс|студи/i.test(t)) found.push(COURSE_TARGET)
+  return found.length === 1 ? found[0] : null
+}
+
+// Steps the code reads by itself: a plain name, a number for an age, a phone,
+// a «да». The parser is not asked about those -- it cost a call per answer and
+// could misread a phone number. Anything else goes to the parser.
+function stepUnderstood(s, text, knowledge, nowMs) {
+  const t = String(text || '').trim()
+  // «отмена», «стоп»: the way out of a form never depends on a model
+  if (CANCEL_RE.test(t)) return true
+  if (!t || namedTarget(knowledge, t, nowMs)) return false
+  const plainName = t.split(/\s+/).length <= 3 && /^[a-zA-Zа-яА-ЯёЁ\s-]+$/.test(t) && !NOT_A_NAME.test(t) && !smallTalkReply(t, nowMs)
+  if (s.step === 'consent') return CONSENT_YES_RE.test(t) || CONSENT_NO_RE.test(t)
+  if (s.step === 'name') return plainName
+  if (s.step === 'age' || s.step === 'extra_age') return /^\d{1,3}(\s*(лет|год|года))?[.!]?$/i.test(t) || /^взросл/i.test(t) || KID_RANGES.indexOf(t) !== -1
+  if (s.step === 'phone') return Boolean(normPhone(t))
+  if (s.step === 'dir_field' && s.draft && s.draft.qs) {
+    const q = s.draft.qs[s.draft.i]
+    if (!q) return false
+    if (q.kind === 'name') return plainName
+    if (q.kind === 'phone') return Boolean(normPhone(t))
+    if (q.kind === 'number') return /^\d{1,4}$/.test(t)
+    if (q.kind === 'email') return /^\S+@\S+\.\S+$/.test(t)
+    if (q.kind === 'choice') return (q.options || []).some((o) => o.toLowerCase() === t.toLowerCase())
+    return !/\?/.test(t) && t.split(/\s+/).length <= 6
+  }
+  return false
 }
 
 // ---------------------------------------------------------------- model
@@ -1237,23 +1330,28 @@ function wantsNamed(knowledge, text, nowMs) {
   return namedTarget(knowledge, text, nowMs)
 }
 
-function switchSignup(res, s, text, parsed, knowledge, nowMs) {
+// The fallback for when the parser is down: the target from the names in the
+// admin, the wish from a word list.
+function switchSignup(res, s, text, knowledge, nowMs) {
   if (!s.draft || !text || s.step === 'extra_age') return false
   const target = namedTarget(knowledge, text, nowMs)
-  if (!target) return false
-  const cur = draftTarget(s.draft)
-  if (target.id === cur.id) return false
+  if (!target || target.id === draftTarget(s.draft).id) return false
   // «а в лагере сколько стоит?» is a question about the camp, not a move to it
-  const asking = parsed ? parsed.intent === 'question' && !parsed.wantsAction : looksLikeQuestion(text)
-  const wants = WANTS_SWITCH.test(text) || Boolean(parsed && parsed.intent === 'signup' && parsed.wantsAction)
-  if (asking || !wants) return false
+  if (looksLikeQuestion(text) || !WANTS_SWITCH.test(text)) return false
+  switchTo(res, s, target, ALSO_SIGNUP.test(text) && !INSTEAD.test(text), knowledge, nowMs)
+  return true
+}
+
+// Moves the open form to another target, or, with `also`, keeps it and
+// promises the other one next.
+function switchTo(res, s, target, also, knowledge, nowMs) {
   const prompt = stepPrompt(s, knowledge)
   if (target.open === false) {
     res.out.push(withLead('Сюда запись сейчас закрыта: <b>' + esc(target.title) + '</b>. Продолжим эту заявку.\n\n', prompt))
     return true
   }
   // «и на лагерь тоже»: two signups, one after the other, not a swap
-  if (ALSO_SIGNUP.test(text) && !INSTEAD.test(text)) {
+  if (also) {
     s.nextSignup = target.id
     res.out.push(withLead('Хорошо, сначала закончим эту заявку, а потом сразу оформлю и эту: <b>' + esc(target.title) + '</b> 🐾\n\n', prompt))
     return true
@@ -1377,6 +1475,7 @@ function dirStep(state, ev, nowMs) {
         answers: d.answers.filter((a) => a.label !== 'Имя' && a.label !== 'Телефон').map((a) => a.label + ': ' + a.value),
       }
       effects.push({ type: 'leadSave', lead, isNew: true, notice: '🆕 Новая заявка' })
+      logLead(state, lead.id, d.dir.title, nowMs)
       state.step = null
       state.draft = null
       out.push(msg(state.chatId, 'Готово, ' + esc(lead.name) + '! Заявка «' + esc(lead.direction) + '» принята.' + (lead.phone ? ' Администратор перезвонит на ' + esc(lead.phone) + ' в рабочее время (' + esc(CONTACT.hours) + ').' : ' Мы свяжемся с вами.'), mainKeyboard()))
@@ -1445,10 +1544,20 @@ function runSignupStart(res, s, nowMs, mode, knowledge) {
   res.effects.push(...r.effects)
 }
 
-function cancelSignup(state) {
+function cancelSignup(state, nowMs) {
+  // remembered, so a second «отмена» right after is not read as "cancel my
+  // old lead" (it was, and the old one was a test lead from two days earlier)
+  state.formCancelledAt = nowMs || 0
+  state.formCancelledTitle = state.draft ? draftTarget(state.draft).title : null
   state.step = null
   state.draft = null
-  return [msg(state.chatId, 'Хорошо, отменил. Если передумаете, кнопка «Записаться на курс» внизу.', mainKeyboard())]
+  return [msg(state.chatId, 'Хорошо, анкету отменил, никуда её не отправлял 🐾', mainKeyboard())]
+}
+
+// What the chat knows about its own leads, for the parser and the model: what
+// the lead was for, when, and whether it was cancelled. Never names or phones.
+function logLead(state, id, title, nowMs) {
+  state.leadLog = (state.leadLog || []).concat([{ id, title, at: nowMs, cancelled: false }]).slice(-5)
 }
 
 // One step of the signup scenario. Returns { out, effects } and, when the
@@ -1462,8 +1571,8 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
   // «забей», «нетуу», «проехали» -- the parser reads these as giving up, which
   // the keyword list never could. The list stays as the fallback for when the
   // parser is off or failed.
-  if (text && (parsedIntent === 'cancel' || parsedIntent === 'decline' || CANCEL_RE.test(text))) return { out: cancelSignup(state), effects }
-  if (ev.kind === 'callback' && ev.data === 'signup:cancel') return { out: cancelSignup(state), effects }
+  if (text && (parsedIntent === 'cancel' || parsedIntent === 'decline' || CANCEL_RE.test(text))) return { out: cancelSignup(state, nowMs), effects }
+  if (ev.kind === 'callback' && ev.data === 'signup:cancel') return { out: cancelSignup(state, nowMs), effects }
   if (state.step === 'dir_field' || state.step === 'dir_confirm') return dirStep(state, ev, nowMs)
 
   if (state.step === 'consent') {
@@ -1479,7 +1588,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
       return { out, effects }
     }
     if (parsedIntent === 'decline' || parsedIntent === 'cancel' || (text && CONSENT_NO_RE.test(text.trim())))
-      return { out: cancelSignup(state), effects }
+      return { out: cancelSignup(state, nowMs), effects }
     if (text) {
       // Asking something is not failing to answer. The first version of this
       // counter cancelled a real person's form because his second message was
@@ -1602,6 +1711,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
         status: 'новая',
       }
       effects.push({ type: 'leadSave', lead, isNew: true, notice: '🆕 Новая заявка' })
+      logLead(state, lead.id, COURSE_TARGET.title, nowMs)
       state.lastLead = Object.assign({}, lead, { at: nowMs })
       state.step = null; state.draft = null
       out.push(msg(state.chatId, 'Готово, ' + esc(lead.name) + '! Заявка принята, администратор перезвонит на ' + lead.phone + ' в рабочее время (' + esc(CONTACT.hours) + ').', mainKeyboard()))
@@ -1697,13 +1807,16 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
   // cfg.parsed filled in. Nothing is mutated on the first pass.
   if (cfg.useParser && cfg.parsed === undefined && ev.kind === 'text' && !isButtonLabel(ev.text)) {
     const prev = freshState(stateIn, ev.chatId, nowMs)
-    res.parse = {
-      messages: parserMessages(ev.text, prev.history, hasOpenLead(prev, nowMs), prev.step || null, prev.lastTopics || null),
-      schema: parserSchema(),
-      userText: ev.text,
+    // a plain answer to the form's question is read by the code, unparsed
+    if (!(prev.step && stepUnderstood(prev, ev.text, knowledge, nowMs))) {
+      res.parse = {
+        messages: parserMessages(ev.text, prev, knowledge, nowMs),
+        schema: parserSchema(knowledge, nowMs),
+        userText: ev.text,
+      }
+      res.state = null
+      return res
     }
-    res.state = null
-    return res
   }
 
   const s = freshState(stateIn, ev.chatId, nowMs)
@@ -1713,9 +1826,10 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
 
   // mid-signup: the scenario owns the conversation
   if (s.step) {
-    // «давай лучше на лагерь»: checked before the step, because the parser
-    // reads that «давай» as a yes and the course form would take it as consent
-    if (ev.kind === 'text' && switchSignup(res, s, ev.text, cfg.parsed || null, knowledge, nowMs)) return res
+    // what the parser chose, before the step reads the text: «давай на лагерь»
+    // would otherwise be taken as a yes to the course form's consent
+    if (ev.kind === 'text' && cfg.parsed && formAction(res, s, ev.text, cfg.parsed, knowledge, nowMs)) return res
+    if (ev.kind === 'text' && !cfg.parsed && switchSignup(res, s, ev.text, knowledge, nowMs)) return res
     const r = signupStep(s, ev, nowMs, knowledge, cfg.parsed ? cfg.parsed.intent : null)
     res.out.push(...r.out)
     res.effects.push(...r.effects)
@@ -1749,6 +1863,7 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
     if (ev.data === 'mylead:cancel') {
       if (s.lastLead && !s.lastLead.cancelled) {
         s.lastLead.cancelled = true
+        for (const l of s.leadLog || []) if (l.id === s.lastLead.id) l.cancelled = true
         const copy = Object.assign({}, s.lastLead)
         delete copy.at
         delete copy.status
@@ -1779,8 +1894,9 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
   if (t === BTN.address) { res.out.push(msg(s.chatId, contactsText(), mainKeyboard())); return res }
   if (t === BTN.signup) { runSignupStart(res, s, nowMs, null, knowledge); return res }
   if (t === BTN.human) { humanRequest(res.out, res.effects, s, t); return res }
-  // ...and «запиши меня куда-нибудь», which gets the list of where it can
-  if (isOrder(t) && (SIGNUP_WORDS.test(t) || wantsNamed(knowledge, t, nowMs))) {
+  // ...and «запиши меня куда-нибудь», which gets the list of where it can.
+  // Word lists only when the parser is down; otherwise the parser decides.
+  if (!cfg.parsed && isOrder(t) && (SIGNUP_WORDS.test(t) || wantsNamed(knowledge, t, nowMs))) {
     s.pendingAge = extractAge(t)
     s.pendingExtra = ANOTHER_CHILD.test(t)
     if (beginSignup(res, s, nowMs, knowledge, t, false)) return res
@@ -1796,25 +1912,21 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
   if (parsed) {
     if (parsed.age != null) s.pendingAge = String(parsed.age)
     s.lastTopics = parsed.topics && parsed.topics.length ? parsed.topics : s.lastTopics
-    // A label is a guess. Acting on a guess is only safe when the person asked
-    // for the action outright -- «запишите меня». A question about the same
-    // subject («а заявки делаешь?») gets an answer and a button, so a misread
-    // costs an ignored button instead of hijacking the conversation.
-    // «давай» right after the bot offered a signup is a yes to that offer. The
-    // parser sees a bare confirmation, the model got the turn instead, and it
-    // wrote "оформляю заявку, форма откроется" while nothing opened.
-    if (offerStillOpen(s, nowMs) && (parsed.intent === 'confirm' || parsed.intent === 'signup')) {
+    const a = parsed.action
+    const target = checkedTarget(knowledge, parsed.target, nowMs) || (a === 'signup' ? singleNamed(knowledge, t, nowMs) : null)
+    // «отмена» right after a cancelled form is about that form, not an old lead
+    if (a === 'cancel') { cancelAsk(res.out, s, nowMs); return res }
+    // «давай» right after the bot offered a signup is a yes to that offer
+    if (a === 'confirm' && offerStillOpen(s, nowMs)) {
       s.signupOfferedAt = 0
       s.pendingExtra = false
-      if (beginSignup(res, s, nowMs, knowledge, t, true)) return res
+      if (beginSignup(res, s, nowMs, knowledge, '', true)) return res
     }
-    const act = parsed.wantsAction && intentAllowed(parsed.intent, s, nowMs)
-    if (act && parsed.intent === 'cancel') { cancelLeadAsk(res.out, s); return res }
-    if (act && parsed.intent === 'add_child') { s.pendingExtra = true; runSignupStart(res, s, nowMs, 'extra', knowledge); return res }
-    if (act && parsed.intent === 'signup') {
+    if (a === 'add_child' && hasOpenLead(s, nowMs)) { s.pendingExtra = true; runSignupStart(res, s, nowMs, 'extra', knowledge); return res }
+    if (a === 'signup' || a === 'signup_also' || a === 'add_child') {
       s.pendingExtra = false
       const before = res.out.length
-      if (beginSignup(res, s, nowMs, knowledge, t, false)) {
+      if (openTarget(res, s, target, t, knowledge, nowMs)) {
         // «хотим на курс, и можно ли на Симона?», «скидка многодетным на курс?»:
         // the form opened, and the question in the same message was dropped.
         // The model answers it first, the form's first step follows, and the
@@ -1827,16 +1939,18 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
         }
         return res
       }
+      // a closed direction: the model says so
     }
-    if (parsed.intent === 'complaint' || (parsed.intent === 'human' && parsed.wantsAction)) { humanRequest(res.out, res.effects, s, t); return res }
-    // everything else is answered, with the button that matches what was asked
-    const offer = parsed.intent === 'signup' || parsed.intent === 'add_child' ? (hasOpenLead(s, nowMs) ? 'extra' : 'signup') : null
+    if (a === 'human') { humanRequest(res.out, res.effects, s, t); return res }
+    if (a === 'unclear') { res.out.push(msg(s.chatId, 'Не совсем понял, напишите, пожалуйста, иначе 🐾', mainKeyboard())); return res }
+    // everything else is answered by the model
+    const offer = null
     // Four pages fit in the prompt whole. Routing saved about a rouble a question
     // and cost the bot its memory of the festival, the camp and the lab when a
     // follow-up landed on the wrong topic -- a bad trade at this size. It comes
     // back on when the handbook outgrows the prompt, not before.
     const topics = CFG.routeKnowledge && parsed.topics && parsed.topics.length ? parsed.topics : null
-    return requestModel(res, s, knowledge, nowMs, t, { offer, parserDecided: true }, topics)
+    return requestModel(res, s, knowledge, nowMs, t, { offer, parserDecided: true, smalltalk: a === 'smalltalk' }, topics)
   }
 
   const words = t.split(/\s+/).length
@@ -1847,7 +1961,7 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
     if (beginSignup(res, s, nowMs, knowledge, t, true)) return res
   }
   // checked before signup: "отмена заявки" contains "заявк" too
-  if (CANCEL_RE.test(t)) { cancelLeadAsk(res.out, s); return res }
+  if (CANCEL_RE.test(t)) { cancelAsk(res.out, s, nowMs); return res }
   // a short "как записаться?" is not a question worth a model call -- the
   // answer to it is the form itself
   // ...but "куда / кому / где / зачем заявку?" asks about the signup itself,
@@ -1864,6 +1978,58 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
   }
 
   return requestModel(res, s, knowledge, nowMs, t, {}, cfg.topics)
+}
+
+// The parser's action while a form is open. True when it was handled here;
+// false leaves the text to the form's step (an answer, a yes, a no).
+function formAction(res, s, text, parsed, knowledge, nowMs) {
+  const a = parsed.action
+  if (a === 'cancel') { res.out.push(...cancelSignup(s, nowMs)); return true }
+  if (a === 'signup' || a === 'signup_also') {
+    const target = checkedTarget(knowledge, parsed.target, nowMs)
+    if (!target || target.id === draftTarget(s.draft).id || s.step === 'extra_age') return false
+    switchTo(res, s, target, a === 'signup_also', knowledge, nowMs)
+    return true
+  }
+  if (a !== 'answer' && a !== 'smalltalk' && a !== 'human' && a !== 'unclear') return false
+  const prompt = stepPrompt(s, knowledge)
+  if (a === 'unclear') { res.out.push(prompt ? withLead('Не совсем понял 🐾\n\n', prompt) : msg(s.chatId, 'Не совсем понял 🐾')); return true }
+  if (a === 'human') { humanRequest(res.out, res.effects, s, text); if (prompt) res.out.push(prompt); return true }
+  // a question in the middle of the form: answered, kept for the administrator,
+  // and the form's buttons come under the answer (the consent step has no text
+  // to repeat, its two buttons are enough)
+  if (a === 'answer' && s.draft) s.draft.questions = (s.draft.questions || []).concat([String(text).slice(0, 200)])
+  requestModel(res, s, knowledge, nowMs, text, { reprompt: prompt && s.step !== 'consent' ? prompt.text : null, repromptMarkup: prompt ? prompt.reply_markup : undefined, inSignup: true }, null)
+  return true
+}
+
+// Opens the form the parser named. No target: the one the bot just offered,
+// else the list of where it can sign up -- never a guess from the words.
+// False when the target is closed.
+function openTarget(res, s, target, text, knowledge, nowMs) {
+  if (target === COURSE_TARGET) { runSignupStart(res, s, nowMs, null, knowledge); return true }
+  if (target) {
+    if (target.open === false) return false
+    res.out.push(...startDirSignup(s, target, nowMs).msgs)
+    insteadOfLead(res, s, text)
+    return true
+  }
+  if (offerStillOpen(s, nowMs) && s.offeredDir) return beginSignup(res, s, nowMs, knowledge, '', true)
+  res.out.push(msg(s.chatId, signupMenuText(knowledge, nowMs), mainKeyboard()))
+  return true
+}
+
+// «отмена» with no form open. Right after a form was cancelled it is about
+// that form; the old lead is asked about separately, by what it was for.
+function cancelAsk(out, s, nowMs) {
+  const lead = s.lastLead && !s.lastLead.cancelled ? s.lastLead : null
+  if (s.formCancelledAt && nowMs - s.formCancelledAt < CFG.offerTtlMs) {
+    s.formCancelledAt = 0
+    if (!lead) { out.push(msg(s.chatId, 'Эту анкету я уже отменил, она никуда не ушла 🐾', mainKeyboard())); return }
+    out.push(msg(s.chatId, 'Эту анкету я уже отменил, она никуда не ушла 🐾\n\nА заявка на курсы от ' + dayMonth(lead.at || nowMs) + ' ещё действует. Её тоже отменить?', inline([[['❌ Да, отменить', 'mylead:cancel'], ['Нет, оставить', 'mylead:keep']]])))
+    return
+  }
+  cancelLeadAsk(out, s)
 }
 
 // Only these words mean "I am waiting for the call". The administrator used to
@@ -1912,6 +2078,12 @@ function requestModel(res, s, knowledge, nowMs, text, ctx, topics) {
   if (ctx.inSignup && s.step && s.draft) {
     messages[0] = Object.assign({}, messages[0], { text: messages[0].text + '\n\nСЕЙЧАС: человек заполняет заявку на «' + draftTarget(s.draft).title + '». Ответь только на его сообщение. Если спрашивает, куда его записывают, прямо назови: «' + draftTarget(s.draft).title + '», и добавь, что если нужно другое, достаточно написать, куда. Не пиши про кнопки и форму и не начинай запись заново: продолжение заявки бот покажет сам.' })
   }
+  // «ты же отменил заявку?» was answered «у меня нет данных»: the model could
+  // not see the chat's own leads. It gets what they were for and their status,
+  // never a name or a phone.
+  const leads = chatStateLines(s, nowMs).filter((l) => /заявк|анкет/.test(l) && !/^Анкета сейчас не открыта/.test(l) && !/^Сейчас открыта/.test(l))
+  if (leads.length) messages[0] = Object.assign({}, messages[0], { text: messages[0].text + '\n\nЗАЯВКИ ЭТОГО ЧАТА (если спросят о них, отвечай по этим строкам):\n' + leads.join('\n') })
+  if (ctx.smalltalk) messages[0] = Object.assign({}, messages[0], { text: messages[0].text + '\n\nЭто болтовня без вопроса: ответь одной-двумя тёплыми фразами от лица кота, по смыслу сказанного (на «как дела» расскажи, как дела у кота), и предложи помочь со спектаклями или курсами. Не пиши «рад помочь» или «рад, что помог», если тебя не благодарили.' })
   res.model = { messages, userText: String(text).slice(0, CFG.maxInputChars), ctx }
   return res
 }

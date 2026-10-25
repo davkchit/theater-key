@@ -41,9 +41,18 @@ let price = 0
 
 async function parse(text, opts = {}) {
   const { hasLead = false, step = null } = opts
-  const r = await callModel(env, lib.parserMessages(text, [], hasLead, step, opts.lastTopics || null), {
+  const nowMs = Date.now()
+  // the chat as the parser sees it: a course form at `step`, an old lead
+  const state = {
+    history: [],
+    step,
+    draft: step ? {} : null,
+    lastLead: hasLead ? { id: 'X', at: nowMs - 86400e3, cancelled: false } : null,
+    lastTopics: opts.lastTopics || null,
+  }
+  const r = await callModel(env, lib.parserMessages(text, state, knowledge, nowMs), {
     parser: true,
-    schema: lib.parserSchema(),
+    schema: lib.parserSchema(knowledge, nowMs),
     maxTokens: 800,
     temperature: 0,
   })
@@ -81,7 +90,7 @@ async function tryPhrases(list) {
     console.log(`👤 ${text}`)
     if (!p) { console.log('   парсер: не разобрал\n'); continue }
     const extra = [p.wantsAction ? 'ПРОСИТ СДЕЛАТЬ' : 'спрашивает', p.age != null ? 'возраст ' + p.age : null, p.show ? 'спектакль «' + p.show + '»' : null].filter(Boolean).join(', ')
-    console.log(`   парсер:  ${p.intent}${p.topics.length ? '  →  ' + p.topics.join(', ') : ''}${extra ? '  ·  ' + extra : ''}`)
+    console.log(`   парсер:  ${p.action}${p.target ? ' → ' + p.target : ''}${p.topics.length ? '  →  ' + p.topics.join(', ') : ''}${extra ? '  ·  ' + extra : ''}`)
     console.log(`   сегодня: ${now}\n`)
   }
   console.log(`токенов: ${totalTokens} ≈ ${((totalTokens / 1000) * price).toFixed(2)} ₽`)
