@@ -12,6 +12,7 @@
 // and a fake Telegram (bot/server/test.mjs).
 
 import { devMail, leadLetter } from './mail.mjs'
+import { journalRow } from './journal.mjs'
 
 export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now = () => Date.now() }) {
   const ADMIN = env.ADMIN_CHAT_ID ? String(env.ADMIN_CHAT_ID) : ''
@@ -99,6 +100,8 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
     // not fatal: the second pass then gets parsed = null and falls back to the
     // keyword rules, exactly today's behaviour.
     let parsed = null
+    const parseAsked = Boolean(res.parse)
+    let parseFailed = false
     if (res.parse) {
       try {
         const raw = await llm(
@@ -115,12 +118,14 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
         )
         parsed = lib.parseTurnReply(contentOf(raw), res.parse.userText)
       } catch (e) {
+        parseFailed = true
         log('разбор намерения не удался:', e.message)
       }
       res = lib.decide(ev, saved, global, knowledge, { ...cfg, useParser: true, parsed })
       if (res.global) { global = res.global; store.putKv('usage', global) }
     }
 
+    let modelFailed = false
     if (res.model) {
       llmCalls = 1
       try {
@@ -138,6 +143,7 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
         res.out = res.out.concat(fin.out)
         res.effects = res.effects.concat(fin.effects)
       } catch (e) {
+        modelFailed = true
         log('модель не ответила:', e.message)
         const ctx = res.model.ctx || {}
         // a form's buttons come along even without a reprompt text: in the
@@ -154,6 +160,17 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
     // storage first, Telegram last: a message is never sent for a turn whose
     // state failed to save (the person would answer a question the bot forgot)
     const p = plan(res)
+    // the turns journal (journal.mjs), for the people who write to the cat;
+    // the admin group's status buttons are not conversations
+    // (no state: a resent duplicate, nothing happened)
+    if (res.state && ev.chatType !== 'group' && ev.chatType !== 'supergroup') {
+      try {
+        p.turns = [journalRow({ ev, before: saved, res, parsed, parseAsked, parseFailed, modelCalled: llmCalls > 0, modelFailed, knowledge, at: new Date(now()).toISOString() })]
+      } catch (e) {
+        // a journal that cannot be written never costs the person the answer
+        log('журнал не записан:', e.message)
+      }
+    }
     store.commit(p)
     for (const item of p.tg) await send(item)
     p.llmCalls = llmCalls

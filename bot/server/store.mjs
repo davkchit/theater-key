@@ -37,6 +37,12 @@ export function openStore(dataDir) {
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, kind TEXT, data TEXT
     );
+    -- one row per message to the cat, without names or phones (journal.mjs)
+    CREATE TABLE IF NOT EXISTS turns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, chat TEXT, kind TEXT,
+      text TEXT, step_before TEXT, parser TEXT, answered_by TEXT, signals TEXT,
+      buttons TEXT, step_after TEXT, outcome TEXT, reply TEXT, data_version TEXT
+    );
   `)
 
   // a database made before directions existed has no such columns
@@ -57,6 +63,10 @@ export function openStore(dataDir) {
     sent: db.prepare('UPDATE outbox SET sent_at = ?, last_error = NULL WHERE id = ?'),
     failed: db.prepare('UPDATE outbox SET tries = ?, next_at = ?, last_error = ? WHERE id = ?'),
     event: db.prepare('INSERT INTO events (at, kind, data) VALUES (?, ?, ?)'),
+    turn: db.prepare(
+      'INSERT INTO turns (at, chat, kind, text, step_before, parser, answered_by, signals, buttons, step_after, outcome, reply, data_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ),
+    pruneTurns: db.prepare('DELETE FROM turns WHERE at < ?'),
   }
 
   // A saved lead row carries only the columns the turn touched: a re-save of an
@@ -94,6 +104,7 @@ export function openStore(dataDir) {
         for (const s of plan.statuses) q.status.run(s.status, s.status_by, s.updated_at, s.lead_id)
         for (const u of plan.unanswered) q.unanswered.run(u.asked_at, u.chat_id, u.question)
         for (const m of plan.mail || []) q.mail.run(m.at, m.to, m.subject, m.text, m.html || '')
+        for (const t of plan.turns || []) q.turn.run(t.at, t.chat, t.kind, t.text, t.step_before, t.parser, t.answered_by, t.signals, t.buttons, t.step_after, t.outcome, t.reply, t.data_version)
         db.exec('COMMIT')
       } catch (e) {
         db.exec('ROLLBACK')
@@ -107,6 +118,7 @@ export function openStore(dataDir) {
     // next = null: given up, stays in the table for the record
     mailFailed(id, tries, next, error) { q.failed.run(tries, next, error, id) },
     addEvent(kind, data) { q.event.run(new Date().toISOString(), kind, JSON.stringify(data)) },
+    pruneTurns(beforeIso) { return q.pruneTurns.run(beforeIso).changes },
     close() { db.close() },
   }
 }

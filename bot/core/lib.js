@@ -2173,6 +2173,8 @@ function requestModel(res, s, knowledge, nowMs, text, ctx, topics) {
       g.alerted = true
       res.effects.push({ type: 'devAlert', text: 'Бот «Ключ»: достигнут дневной лимит обращений к модели (' + CFG.maxLlmGlobalPerDay + '). Бот отвечает только кнопками до завтра.' })
     }
+    // for the turns journal (turn.mjs): which limit, so it can be told apart
+    res.limited = res.llmBlocked ? 'лимит посетителя' : globalHit ? 'дневной лимит бота' : 'лимит чата'
     res.out.push(msg(s.chatId, 'Столько вопросов за раз я уже не унесу, мяу. Кнопки внизу работают, а на всё остальное лучше ответит администратор: ' + esc(phoneWithHours()) + '.', mainKeyboard()))
     if (ctx.reprompt) res.out.push(msg(s.chatId, ctx.reprompt, ctx.repromptMarkup))
     return res
@@ -2364,6 +2366,15 @@ function afterModel(res, rawReply, nowMs, knowledge) {
   pushHistory(s, 'user', res.model.userText)
   pushHistory(s, 'assistant', text)
   if (markers.unknown) effects.push({ type: 'unanswered', chatId: s.chatId, question: res.model.userText, at: new Date(nowMs).toISOString() })
+  // what the checks above did to the reply, for the turns journal (turn.mjs):
+  // where the model needed correcting is where to look next
+  res.notes = [
+    markers.unknown && 'нет ответа в данных',
+    checked.dropped && 'вырезана сумма не из данных',
+    text !== priced && 'отказ повторять чужие слова',
+    parsed.replaced && 'убрано «не могу записать»',
+    !html && 'пустой ответ модели',
+  ].filter(Boolean)
 
   if (ctx.inSignup) {
     // One message, not two: a separate re-prompt could arrive after the next

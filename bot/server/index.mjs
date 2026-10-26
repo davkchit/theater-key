@@ -31,6 +31,7 @@ import { createTurn } from './turn.mjs'
 import { createMailer, devMail } from './mail.mjs'
 import { createSiteApi } from './site.mjs'
 import { leadsCsv } from './csv.mjs'
+import { KEEP_DAYS, turnsCsv, turnsSummary } from './journal.mjs'
 import { createWebChat } from './webchat.mjs'
 
 const env = { ...loadEnv(), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TELEGRAM|ADMIN|LLM|YANDEX|SITE_URL|BOT_|KNOWLEDGE|SMTP|LEADS|MAIL_|DEV_EMAIL|ALLOWED_ORIGINS|TRUST_PROXY)/.test(k))) }
@@ -240,6 +241,28 @@ function unansweredSince(fromIso) {
 }
 setInterval(weeklyReport, 3600e3).unref()
 
+// ---- the turns journal (journal.mjs): last week's file to the developer on
+// Monday morning, and nothing older than 90 days kept
+async function weeklyJournal() {
+  const cut = new Date(Date.now() - KEEP_DAYS * 86400e3).toISOString()
+  const gone = store.pruneTurns(cut)
+  if (gone) log('журнал: удалено старых строк', gone)
+  if (!mailer.enabled || !env.DEV_EMAIL_TO) return
+  const w = weekKey(Date.now())
+  if (!w.isMondayMorning || store.getKv('turnsSent') === w.key) return
+  const from = new Date(Date.parse(w.key + 'T00:00:00+03:00') - 7 * 86400e3).toISOString()
+  const csv = turnsCsv(store.db, from)
+  try {
+    const text = 'Журнал кота за прошлую неделю во вложении, без имён и телефонов. Файл открывается в Excel.\n\n' + turnsSummary(store.db, from)
+    await mailer.sendNow({ to: 'dev', subject: 'Журнал кота за неделю: ' + csv.count + ' сообщений', text, attachments: [{ filename: 'журнал-кота-' + w.key + '.csv', content: csv.text, contentType: 'text/csv; charset=utf-8' }] })
+    store.putKv('turnsSent', w.key)
+    log('журнал за неделю отправлен:', csv.count, 'строк')
+  } catch (e) {
+    log('журнал за неделю не ушёл, повторю через час:', e.message)
+  }
+}
+setInterval(weeklyJournal, 3600e3).unref()
+
 // ---- the afisha follows Bileton's widgets hourly (deploy/cms/bileton-sync.sh),
 // which leaves a status file. What it removed and what failed goes to the
 // mailbox that gets the leads — whoever runs the site — once per run that
@@ -344,6 +367,7 @@ process.on('unhandledRejection', (e) => log('необработанная оши
 // mail and the weekly report do not depend on Telegram
 mailer.start()
 weeklyReport()
+weeklyJournal()
 
 if (env.BOT_POLL === '0') {
   log(`сервис запущен без Telegram (BOT_POLL=0): только сайт и почта · знание ${knowledge.get().builtAt}`)

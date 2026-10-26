@@ -16,14 +16,14 @@ const COLUMNS = [
   ['lead_id', 'Номер заявки'],
 ]
 
-const cell = (v) => {
+export const cell = (v) => {
   const s = String(v == null ? '' : v)
   // a cell starting with = + - @ would run as a formula in Excel
   const safe = /^[=+\-@]/.test(s) ? "'" + s : s
   return /[";\n\r]/.test(safe) ? '"' + safe.replace(/"/g, '""') + '"' : safe
 }
 
-const msk = (iso) => {
+export const msk = (iso) => {
   if (!iso) return ''
   const p = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(iso))
   const g = (t) => (p.find((x) => x.type === t) || {}).value || ''

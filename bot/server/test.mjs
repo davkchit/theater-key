@@ -945,6 +945,54 @@ test('чат на сайте: вопрос уходит модели, ответ
   w.close()
 })
 
+test('журнал: каждый ход строкой, без имени и телефона; видно «анкета открыта» и «заявка»', async () => {
+  const w = webRig({ llm: async () => ({ choices: [{ message: { content: 'Курсы идут два раза в неделю. Мой номер для справок +7 906 120-22-62.' } }] }) })
+  await w.post({ start: true })
+  await w.post({ text: 'а как проходят занятия? пишите на anna@mail.ru' })
+  await w.post({ text: 'запишите дочку, ей 7' })
+  await w.post({ tap: 'consent:yes' })
+  await w.post({ text: 'Марина' })
+  await w.post({ text: '7' })
+  await w.post({ text: '89061234567' })
+  await w.post({ tap: 'confirm:yes' })
+  const rows = w.store.db.prepare('SELECT * FROM turns ORDER BY id').all()
+  assert.equal(rows.length, 8, 'строк: ' + rows.length)
+  const all = JSON.stringify(rows)
+  assert.ok(!/Марина/.test(all), 'имя попало в журнал')
+  assert.ok(!/906\D*123|89061234567|anna@mail/.test(all), 'телефон или почта попали в журнал')
+  assert.equal(new Set(rows.map((r) => r.chat)).size, 1)
+  assert.ok(!rows[0].chat.includes(w.session), 'вместо разговора его настоящий номер сессии')
+  assert.equal(rows[0].kind, 'начало чата')
+  assert.equal(rows[1].answered_by, 'модель')
+  assert.match(rows[1].text, /\[почта\]/)
+  assert.match(rows[1].reply, /\[номер\]/)
+  assert.ok(rows.some((r) => /анкета открыта: Актёрские курсы/.test(r.outcome)), all)
+  assert.ok(rows.some((r) => /заявка: Курсы/.test(r.outcome)), all)
+  assert.equal(rows.find((r) => r.step_before === 'name').text, '[ответ анкеты]')
+  // the file for Excel and its summary
+  const { turnsCsv, turnsSummary } = await import('./journal.mjs')
+  const csv = turnsCsv(w.store.db)
+  assert.equal(csv.count, 8)
+  assert.ok(csv.text.startsWith('﻿Когда (МСК);Разговор;'), csv.text.slice(0, 60))
+  assert.match(turnsSummary(w.store.db), /Анкет открыто: 1, заявок: 1, бросили анкету: 0/)
+  w.close()
+})
+
+test('журнал: вырезанная цена видна в «Сигналах», упавшая модель в «Кто ответил»', async () => {
+  let mode = 'price'
+  const w = webRig({ llm: async () => {
+    if (mode === 'down') throw new Error('нет денег')
+    return { choices: [{ message: { content: 'Курс стоит 100 ₽ в месяц.' } }] }
+  } })
+  await w.post({ session: 'jjjjjjjjjjjjjjjj0001', text: 'сколько стоит курс?' })
+  mode = 'down'
+  await w.post({ session: 'jjjjjjjjjjjjjjjj0002', text: 'расскажи про Симона' })
+  const rows = w.store.db.prepare('SELECT * FROM turns ORDER BY id').all()
+  assert.match(rows[0].signals, /вырезана сумма не из данных/)
+  assert.equal(rows[1].answered_by, 'модель не ответила')
+  w.close()
+})
+
 test('чат на сайте: запись до конца кнопками, заявка «чат на сайте», карточка админу в Telegram', async () => {
   const w = webRig()
   let r = await w.post({ text: 'запишите дочку, ей 7' })

@@ -14,6 +14,7 @@
     "bot:test": "node --no-warnings bot/server/test.mjs",
     "bot:eval": "node bot/scripts/eval.mjs --parser",
     "leads": "node --no-warnings bot/server/export-leads.mjs",
+    "turns": "node --no-warnings bot/server/export-turns.mjs",
     "prerender": "node scripts/prerender.mjs"
   },
   "dependencies": {
