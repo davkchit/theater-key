@@ -5,16 +5,21 @@ import blinkImg from '../../../assets/puppet/head-blink.webp'
 import bodyImg from '../../../assets/puppet/body.webp'
 import pawImg from '../../../assets/puppet/paw-wave.webp'
 import tailImg from '../../../assets/puppet/tail.webp'
+import curtainImg from '../../../assets/puppet/curtain-swag.webp'
 
-// The theatre's cat as a glove puppet peeking up from the bottom edge of the
-// screen (the booth curtain it stood behind covered the page too much), assembled from
+// The theatre's cat as a glove puppet above a short velvet valance (its ends
+// curl up at the sides, so it ends on the screen instead of running off the
+// bottom, as the old booth curtain did, which covered the page), assembled from
 // separate parts so it can move like one: the whole puppet sways a little as
 // if on a hand, the head tilts, the tail swings, it blinks now and then and
 // waves when you point at it (and sometimes on its own). With reduced motion
 // it just stands there.
 
 // Part positions in the 1254-px space of the original picture: left, top, width.
-const STAGE_H = 1290 // the curtain hangs a bit below the original frame
+const STAGE_H = 1370 // the valance hangs below the original frame
+// the valance: its curved top covers the bottom of the body (which ends at
+// about 1120), its curled ends hang to the bottom of the stage
+const CURTAIN_TOP = 1010
 const at = (left: number, top: number, width: number): CSSProperties => ({
   position: 'absolute',
   left: `${(left / 1254) * 100}%`,
@@ -77,10 +82,9 @@ export function Puppet({ hover = false }: { hover?: boolean }) {
   }, [hover])
 
   return (
-    // the lower fifth, where the curtain hung, stays below the screen edge:
-    // the edge itself hides the hand inside the puppet
-    <div className="relative w-full translate-y-[20%]" style={{ aspectRatio: `1254 / ${STAGE_H}` }}>
-      {/* peeks out from below the edge, then sways as if on a hand */}
+    // the valance hides the hand inside the puppet
+    <div className="relative w-full" style={{ aspectRatio: `1254 / ${STAGE_H}` }}>
+      {/* peeks out from behind the valance, then sways as if on a hand */}
       <motion.div
         className="absolute inset-0"
         style={{ transformOrigin: '50% 100%' }}
@@ -134,6 +138,7 @@ export function Puppet({ hover = false }: { hover?: boolean }) {
           />
         </motion.div>
       </motion.div>
+      <img src={curtainImg} alt="" draggable={false} style={at(0, CURTAIN_TOP, 1254)} />
     </div>
   )
 }

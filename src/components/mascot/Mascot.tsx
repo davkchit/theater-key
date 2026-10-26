@@ -11,16 +11,6 @@ import { Puppet } from './Puppet'
 // The theatre's cat in the corner of every page. A tap opens a chat with it:
 // the same bot as in Telegram (answers, signup, leads), see ChatPanel.
 
-// bottom-edge positions (px from the right edge) the mascot occasionally
-// wanders between -- a short walk along the footer strip, never into the
-// middle of the page where it could sit on top of real content. These are
-// desktop-scale distances; on a narrow phone screen `right: 420` alone would
-// push the whole mascot past the left edge, so they get clamped against the
-// live viewport width below rather than used as-is.
-const BASE_WALK_SPOTS = [24, 200, 420, 90]
-// the puppet's own width (w-26 / sm:w-32 = 104-128px) plus a little breathing room
-const MASCOT_FOOTPRINT = 150
-
 // What the cat says on its own, once a visit, after the visitor has looked
 // around a little: people phone out of habit and do not know the cat can sign
 // them up. A different line on the courses page, where that is the point.
@@ -42,10 +32,6 @@ export function Mascot() {
   const [hover, setHover] = useState(false)
   const [bubble, setBubble] = useState(false)
   const { pathname } = useLocation()
-  const [spotIndex, setSpotIndex] = useState(0)
-  const [viewportW, setViewportW] = useState(() =>
-    typeof window === 'undefined' ? 1280 : window.innerWidth,
-  )
   const panelRef = useRef<HTMLDivElement>(null)
   const prefersReducedMotion = useReducedMotion()
 
@@ -86,33 +72,6 @@ export function Mascot() {
     return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpen)
   }, [])
 
-  useEffect(() => {
-    const onResize = () => setViewportW(window.innerWidth)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
-  // occasional short walk along the bottom edge -- most of the time it just
-  // idles in place (see the CSS kl-float bob on the inner wrapper below);
-  // it stays put while the chat is open, next to its window
-  useEffect(() => {
-    if (prefersReducedMotion || open) return
-    const id = setInterval(
-      () =>
-        setSpotIndex(
-          (i) =>
-            (i + 1 + Math.floor(Math.random() * (BASE_WALK_SPOTS.length - 1))) %
-            BASE_WALK_SPOTS.length,
-        ),
-      25000,
-    )
-    return () => clearInterval(id)
-  }, [prefersReducedMotion, open])
-
-  const maxRight = Math.max(24, viewportW - MASCOT_FOOTPRINT)
-  const walkSpots = viewportW < 640 ? [24] : BASE_WALK_SPOTS.map((s) => Math.min(s, maxRight))
-  const right = open ? 24 : walkSpots[spotIndex % walkSpots.length]
-
   return toBody(
     <>
       <AnimatePresence>
@@ -134,12 +93,10 @@ export function Mascot() {
         )}
       </AnimatePresence>
 
-      <motion.div
-        // the puppet peeks up from the bottom edge of the screen
-        className={['fixed bottom-0 z-60', open ? 'max-sm:hidden' : ''].join(' ')}
-        initial={false}
-        animate={{ right }}
-        transition={{ duration: 3.5, ease: [0.4, 0, 0.2, 1] }}
+      <div
+        // always in the bottom right corner, under its chat window: it used to
+        // wander along the bottom edge now and then, and people lost it
+        className={['fixed right-6 bottom-0 z-60', open ? 'max-sm:hidden' : ''].join(' ')}
       >
         <AnimatePresence>
           {bubble && !open && (
@@ -175,12 +132,14 @@ export function Mascot() {
           onPointerLeave={() => setHover(false)}
           aria-label={open ? 'Закрыть чат с котом' : 'Открыть чат с котом театра'}
           aria-expanded={open}
-          className="block w-26 origin-bottom drop-shadow-[0_-4px_14px_rgba(0,0,0,.18)] transition-transform duration-200 ease-out active:scale-[.96] active:duration-100 sm:w-32"
+          // narrower on a phone since the valance came back: at 104 px the cat
+          // with it stood 30 px higher and its ears covered «О спектакле»
+          className="block w-22 origin-bottom drop-shadow-[0_-4px_14px_rgba(0,0,0,.18)] transition-transform duration-200 ease-out active:scale-[.96] active:duration-100 sm:w-32"
         >
           {/* peeks out, sways, blinks; waves when you point at it */}
           <Puppet hover={hover} />
         </button>
-      </motion.div>
+      </div>
     </>,
   )
 }
