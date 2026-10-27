@@ -59,6 +59,14 @@
       "ticketUrl": "https://bileton.ru/widget/teatr_kluch/event/?id_event=272476"
     },
     {
+      "date": "2026-11-07",
+      "title": "Бесконечный апрель",
+      "time": "18:00",
+      "age": "12+",
+      "band": "paper",
+      "ticketUrl": "https://bileton.ru/widget/teatr_kluch/event/?id_event=277360"
+    },
+    {
       "date": "2026-11-14",
       "title": "Никаких последствий",
       "age": "16+",
@@ -83,6 +91,14 @@
       "age": "16+"
     },
     {
+      "date": "2026-11-22",
+      "title": "Бесконечный апрель",
+      "time": "15:00",
+      "age": "12+",
+      "band": "paper",
+      "ticketUrl": "https://bileton.ru/widget/teatr_kluch/event/?id_event=277361"
+    },
+    {
       "date": "2026-11-28",
       "title": "Никаких последствий",
       "age": "16+",
@@ -105,6 +121,14 @@
       "band": "paper",
       "ticketUrl": "https://bileton.ru/widget/teatr_kluch/event/?id_event=272482",
       "age": "16+"
+    },
+    {
+      "date": "2026-12-06",
+      "title": "Бесконечный апрель",
+      "time": "15:00",
+      "age": "12+",
+      "band": "paper",
+      "ticketUrl": "https://bileton.ru/widget/teatr_kluch/event/?id_event=277362"
     }
   ]
 }
