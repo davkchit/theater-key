@@ -6,14 +6,6 @@ export interface NavItem {
   to: string
 }
 
-export interface Band {
-  num: string
-  word: string
-  note: string
-  color: BrandColorKey
-  icon: string
-}
-
 export interface AfishaItem {
   day: string
   mon: string
@@ -59,14 +51,6 @@ export interface Show {
   photos?: string[]
   /** who plays; empty = the block is hidden */
   cast?: { name: string; role?: string; photo?: string }[]
-}
-
-export interface TeamMember {
-  name: string
-  role: string
-  photo: string
-  bg: BrandColorKey
-  lead?: boolean
 }
 
 export interface Course {

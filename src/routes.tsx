@@ -4,7 +4,6 @@
 import { Navigate, type RouteObject } from 'react-router-dom'
 import { FromNovaya } from './pages/FromNovaya'
 import App from './App'
-import HomePage from './pages/HomePage'
 import HomePageV2 from './pages/HomePageV2'
 import RepertoirePageV2 from './pages/RepertoirePageV2'
 import ShowPageV2 from './pages/ShowPageV2'
@@ -18,16 +17,6 @@ import AfishaPageV2 from './pages/AfishaPageV2'
 import GalleryPageV2 from './pages/GalleryPageV2'
 import ContactsPageV2 from './pages/ContactsPageV2'
 import PrivacyPageV2 from './pages/PrivacyPageV2'
-import AfishaPage from './pages/AfishaPage'
-import RepertoirePage from './pages/RepertoirePage'
-import AboutPage from './pages/AboutPage'
-import TeamPage from './pages/TeamPage'
-import GalleryPage from './pages/GalleryPage'
-import CoursesPage from './pages/CoursesPage'
-import CourseGroupPage from './pages/CourseGroupPage'
-import ContactsPage from './pages/ContactsPage'
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
-import NotFoundPage from './pages/NotFoundPage'
 
 export const routes: RouteObject[] = [
   {
@@ -51,18 +40,8 @@ export const routes: RouteObject[] = [
       // links shared while the new design was being approved
       { path: 'novaya/*', element: <FromNovaya /> },
 
-      // the previous design, kept for reference
-      { path: 'staryi', element: <HomePage /> },
-      { path: 'staryi/afisha', element: <AfishaPage /> },
-      { path: 'staryi/repertuar', element: <RepertoirePage /> },
-      { path: 'staryi/o-teatre', element: <AboutPage /> },
-      { path: 'staryi/komanda', element: <TeamPage /> },
-      { path: 'staryi/galereya', element: <GalleryPage /> },
-      { path: 'staryi/kursy', element: <CoursesPage /> },
-      { path: 'staryi/kursy/:groupKey', element: <CourseGroupPage /> },
-      { path: 'staryi/kontakty', element: <ContactsPage /> },
-      { path: 'staryi/politika', element: <PrivacyPolicyPage /> },
-      { path: 'staryi/*', element: <NotFoundPage /> },
+      // the previous design lived at /staryi; its links land on the home page
+      { path: 'staryi/*', element: <Navigate to="/" replace /> },
 
       // seasonal events: /laboratoriya, /lager, /kvest…; any other single word is a 404 there
       { path: ':slug', element: <EventPageV2 /> },

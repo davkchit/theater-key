@@ -61,5 +61,3 @@ export function showSlug(title: string): string {
 
 export const showBySlug = (slug: string): Show | undefined =>
   shows.find((s) => showSlug(s.title) === slug)
-
-export const showsPreview: Show[] = shows.slice(0, 3)

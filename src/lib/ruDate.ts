@@ -33,10 +33,3 @@ export function startOfToday(): Date {
   d.setHours(0, 0, 0, 0)
   return d
 }
-
-/** Three-letter month stub for the compact date blocks ("сентября" -> "сен").
- *  Every Russian month's first three letters are unique, so a slice is enough
- *  and there's no second list to keep in sync with MONTHS_GENITIVE. */
-export function shortMon(mon: string): string {
-  return mon.slice(0, 3)
-}
