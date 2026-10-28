@@ -67,6 +67,8 @@ export function openStore(dataDir) {
       'INSERT INTO turns (at, chat, kind, text, step_before, parser, answered_by, signals, buttons, step_after, outcome, reply, data_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ),
     pruneTurns: db.prepare('DELETE FROM turns WHERE at < ?'),
+    pruneChats: db.prepare('DELETE FROM chats WHERE updated_at < ?'),
+    pruneMail: db.prepare('DELETE FROM outbox WHERE sent_at IS NOT NULL AND sent_at < ?'),
   }
 
   // A saved lead row carries only the columns the turn touched: a re-save of an
@@ -119,6 +121,9 @@ export function openStore(dataDir) {
     mailFailed(id, tries, next, error) { q.failed.run(tries, next, error, id) },
     addEvent(kind, data) { q.event.run(new Date().toISOString(), kind, JSON.stringify(data)) },
     pruneTurns(beforeIso) { return q.pruneTurns.run(beforeIso).changes },
+    // a chat keeps its last replies, and a sent letter a lead's name and phone;
+    // the lead itself stays in `leads`, these copies need not live forever
+    pruneOld(beforeIso) { return q.pruneChats.run(beforeIso).changes + q.pruneMail.run(beforeIso).changes },
     close() { db.close() },
   }
 }

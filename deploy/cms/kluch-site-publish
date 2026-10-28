@@ -4,13 +4,23 @@
 set -eu
 src=/opt/kluch/src/dist
 test -f "$src/index.html" || { echo 'нет собранного сайта' >&2; exit 1; }
-rm -rf /opt/kluch/site.new /opt/kluch/site.old
-cp -a "$src" /opt/kluch/site.new
-chown -R root:root /opt/kluch/site.new
-chmod -R a+rX /opt/kluch/site.new
-[ -d /opt/kluch/site ] && mv /opt/kluch/site /opt/kluch/site.old
-mv /opt/kluch/site.new /opt/kluch/site
-rm -rf /opt/kluch/site.old
+# /opt/kluch/site is a link to the current copy, and the switch is one
+# rename of a link, so a visitor never lands between the old and the new
+# site (moving whole folders left a moment with no site at all, a 404)
+new=/opt/kluch/site-$(date +%s)
+rm -rf "$new" /opt/kluch/site.link
+cp -a "$src" "$new"
+chown -R root:root "$new"
+chmod -R a+rX "$new"
+# the first publish after this change: the live site is still a real folder
+if [ -d /opt/kluch/site ] && [ ! -L /opt/kluch/site ]; then
+  mv /opt/kluch/site /opt/kluch/site-was-folder
+fi
+ln -s "$new" /opt/kluch/site.link
+mv -T /opt/kluch/site.link /opt/kluch/site
+for old in /opt/kluch/site-*; do
+  [ "$old" = "$new" ] || rm -rf "$old"
+done
 echo 'сайт обновлён'
 # the bot would read the new knowledge.json within ten minutes; tell it now.
 # A bot that is down, or an older one without this address, does not fail it

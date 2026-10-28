@@ -9,13 +9,16 @@
 // Settings come from .env.bot next to the repo, overridden by real environment
 // variables (that is how Docker passes them):
 //   TELEGRAM_BOT_TOKEN, ADMIN_CHAT_ID
-//   LLM_BASE, LLM_AUTH, LLM_KEY, LLM_KEY_2..9, LLM_MODEL, LLM_PARSER_MODEL
+//   LLM_BASE, LLM_AUTH, LLM_KEY, LLM_MODEL, LLM_PARSER_MODEL
 //   SITE_URL          fetch knowledge.json from the deployed site (optional)
 //   BOT_DATA_DIR      where kluch.sqlite and bot.log live (default bot/data)
 //   BOT_PORT, BOT_HOST
 //   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, LEADS_EMAIL_TO, DEV_EMAIL_TO   (see mail.mjs)
 //   ALLOWED_ORIGINS   sites allowed to post leads from a browser, comma-separated
 //   TRUST_PROXY=1     behind nginx/caddy: take the visitor's address from X-Forwarded-For
+//   TG_NOTIFY_TOKEN, TG_NOTIFY_CHAT   a Telegram bot that only says «пришла
+//                     заявка, смотрите почту», no names or phones; chat ids
+//                     comma-separated (optional)
 //   BOT_POLL=0        do not read Telegram (HTTP only); TELEGRAM_BOT_TOKEN is
 //                     then optional
 
@@ -69,15 +72,17 @@ async function alarm(text) {
 }
 
 const knowledge = createKnowledge({ env, repoRoot, store, log, alarm })
-const deadKeys = store.getKv('deadKeys') || {}
-const llm = async (body, budgetMs) => {
-  const r = await lib.callLlm(fetchHelpers, env, { deadKeys }, body, budgetMs)
-  store.putKv('deadKeys', deadKeys)
-  return r
-}
+const llm = (body, budgetMs) => lib.callLlm(fetchHelpers, env, body, budgetMs)
 
 // a turn only queues its letters (outbox); they go out after the turn, see handleUpdate
-const mailer = createMailer({ env, store, log })
+const notifyTg = env.TG_NOTIFY_TOKEN && env.TG_NOTIFY_CHAT ? createTelegram(env.TG_NOTIFY_TOKEN, redact, log) : null
+const notify = notifyTg
+  ? async (text) => {
+      for (const chat of env.TG_NOTIFY_CHAT.split(',').map((c) => c.trim()).filter(Boolean))
+        await notifyTg.send({ method: 'sendMessage', payload: { chat_id: chat, text } })
+    }
+  : null
+const mailer = createMailer({ env, store, log, notify })
 // the chat window on the site shares the turn: its own messages go back in the
 // HTTP reply, everything else (the admin chat) to Telegram, see webchat.mjs
 let webchat = null
@@ -247,6 +252,8 @@ async function weeklyJournal() {
   const cut = new Date(Date.now() - KEEP_DAYS * 86400e3).toISOString()
   const gone = store.pruneTurns(cut)
   if (gone) log('журнал: удалено старых строк', gone)
+  const old = store.pruneOld(cut)
+  if (old) log('удалено старых чатов и отправленных писем:', old)
   if (!mailer.enabled || !env.DEV_EMAIL_TO) return
   const w = weekKey(Date.now())
   if (!w.isMondayMorning || store.getKv('turnsSent') === w.key) return

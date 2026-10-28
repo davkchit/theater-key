@@ -1,9 +1,8 @@
 // Core logic of the «Ключ» Telegram bot.
 //
-// Plain functions only -- no imports, no exports, no n8n globals. The same text
-// is inlined into the n8n Code nodes by scripts/build-workflow.mjs and loaded
-// into Node by the local simulator/tests, so what is tested here is exactly
-// what runs in n8n.
+// Plain functions only -- no imports, no exports. The server, the eval and the
+// tests all load this very text into a node:vm context (server/lib.mjs), so
+// what is tested here is exactly what runs.
 //
 // The one rule the whole file is built around: the model TALKS, the code WRITES.
 // The model only ever produces reply text plus an optional marker; names,
@@ -812,6 +811,8 @@ function stepUnderstood(s, text, knowledge, nowMs) {
   const t = String(text || '').trim()
   // «отмена», «стоп»: the way out of a form never depends on a model
   if (CANCEL_RE.test(t)) return true
+  // a comment for the administrator is taken as it is, whatever it says
+  if (t && s.draft && s.draft.commenting) return true
   if (!t || namedTarget(knowledge, t, nowMs)) return false
   const plainName = t.split(/\s+/).length <= 3 && /^[a-zA-Zа-яА-ЯёЁ\s-]+$/.test(t) && !NOT_A_NAME.test(t) && !REFUSAL.test(t) && !smallTalkReply(t, nowMs)
   if (s.step === 'consent') return CONSENT_YES_RE.test(t) || CONSENT_NO_RE.test(t)
@@ -1132,45 +1133,18 @@ function consentButtons() {
 
 // ---------------------------------------------------------------- model calls
 
-// Free tiers cap every key per model per day. With several keys the bot moves
-// to the next one when a key is spent, and remembers until when it is spent,
-// so later messages do not waste a minute of retries on it first.
-function llmKeys(env) {
-  const keys = [env.LLM_KEY]
-  for (let n = 2; n <= 9; n++) keys.push(env['LLM_KEY_' + n])
-  return keys.filter(Boolean)
-}
-
-function pickKey(keys, dead, model, nowMs) {
-  for (let i = 0; i < keys.length; i++) if (!(dead[model + '#' + i] > nowMs)) return i
-  return -1
-}
-
-// Groq says which limit it hit and for how long: "... on tokens per day (TPD)
-// ... Please try again in 24m1.58s". A day limit means "use another key", a
-// minute limit means "wait a few seconds with the same one".
-function limitInfo(status, message) {
-  if (status !== 429) return { kind: null, waitMs: 0 }
-  const m = String(message || '')
-  const t = m.match(/try again in\s*(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(?:([\d.]+)s)?/i)
-  const waitMs = t ? (((Number(t[1]) || 0) * 3600) + ((Number(t[2]) || 0) * 60) + (Number(t[3]) || 0)) * 1000 + 500 : 10000
-  if (/per day|TPD|RPD/i.test(m)) return { kind: 'day', waitMs: Math.max(waitMs, 60000) }
-  return { kind: 'minute', waitMs }
-}
-
-// One chat completion, with key rotation. `helpers` is n8n's this.helpers.
-async function callLlm(helpers, env, store, body, budgetMs) {
-  store.deadKeys = store.deadKeys || {}
-  const keys = llmKeys(env)
+// One chat completion. `helpers` has n8n's httpRequest() shape (see
+// server/lib.mjs). A network error, a busy model (429) or a server error is
+// tried again within the time budget; anything else is final.
+async function callLlm(helpers, env, body, budgetMs) {
   const url = (env.LLM_BASE || 'https://llm.api.cloud.yandex.net/v1') + '/chat/completions'
+  const headers = { Authorization: (env.LLM_AUTH || 'Api-Key') + ' ' + env.LLM_KEY, 'Content-Type': 'application/json' }
+  if (env.YANDEX_FOLDER_ID) headers['x-folder-id'] = env.YANDEX_FOLDER_ID
   const started = Date.now()
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-  let last = 'нет ключей'
+  let last = 'нет ключа'
+  if (!env.LLM_KEY) throw new Error(last)
   for (let attempt = 0; attempt < 10 && Date.now() - started < budgetMs; attempt++) {
-    const i = pickKey(keys, store.deadKeys, body.model, Date.now())
-    if (i < 0) { last = 'у всех ключей кончился дневной лимит: ' + last; break }
-    const headers = { Authorization: (env.LLM_AUTH || 'Api-Key') + ' ' + keys[i], 'Content-Type': 'application/json' }
-    if (env.YANDEX_FOLDER_ID) headers['x-folder-id'] = env.YANDEX_FOLDER_ID
     let r
     try {
       r = await helpers.httpRequest({ method: 'POST', url, headers, body, json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 30000 })
@@ -1181,14 +1155,17 @@ async function callLlm(helpers, env, store, body, budgetMs) {
     }
     if (r.statusCode >= 200 && r.statusCode < 300) return r.body
     const msg = (r.body && r.body.error && r.body.error.message) || JSON.stringify(r.body || '').slice(0, 200)
-    last = 'ключ ' + (i + 1) + ', ' + r.statusCode + ': ' + String(msg).replace(/org_\w+/g, 'org').slice(0, 200)
-    const lim = limitInfo(r.statusCode, msg)
-    if (lim.kind === 'day') { store.deadKeys[body.model + '#' + i] = Date.now() + lim.waitMs; continue }
-    if (lim.kind === 'minute') { await sleep(Math.min(lim.waitMs, Math.max(0, budgetMs - (Date.now() - started)))); continue }
-    if (r.statusCode >= 500) { await sleep(2000); continue }
+    last = r.statusCode + ': ' + String(msg).slice(0, 200)
+    if (r.statusCode === 429 || r.statusCode >= 500) { await sleep(2000); continue }
     break
   }
   throw new Error(last)
+}
+
+// A lead's number. The time alone would let two leads confirmed in the same
+// millisecond share one, and the second would overwrite the first in the base.
+function leadId(nowMs) {
+  return 'L' + nowMs.toString(36).toUpperCase() + Math.random().toString(36).slice(2, 4).toUpperCase()
 }
 
 // The bot offered a signup a moment ago (a button, or its reply said
@@ -1472,7 +1449,42 @@ function courseResume(s, nowMs) {
 
 function courseSummary(s, knowledge) {
   const d = s.draft
-  return msg(s.chatId, 'Проверьте, всё верно?\n\n👤 ' + esc(d.name) + '\n' + personIcon(null, d.age) + ' ' + esc(knowledge ? childLine(knowledge, d.age) : d.age) + '\n📞 ' + d.phone, inline([[['✅ Да, всё верно', 'confirm:yes'], ['✏️ Исправить', 'confirm:edit']]]))
+  return msg(s.chatId, 'Проверьте, всё верно?\n\n👤 ' + esc(d.name) + '\n' + personIcon(null, d.age) + ' ' + esc(knowledge ? childLine(knowledge, d.age) : d.age) + '\n📞 ' + d.phone + commentLine(d), confirmButtons(d))
+}
+
+// The optional comment on the last step: what the administrator should know
+// before calling («звоните после 18», «двое детей, 7 и 12»). A button, not a
+// step of its own: most people have nothing to add, and every extra question
+// loses some of them. The text is taken as it is, never by the parser or the
+// model, and like every form answer it never reaches the turns journal.
+const COMMENT_ASK = 'Напишите комментарий одним сообщением: например, когда удобнее звонить или что важно знать администратору.'
+// while writing a comment only a plain «отмена» cancels the form: «не надо
+// звонить до 18» is a comment, not a way out
+const COMMENT_CANCEL = /^(отмена|отмена записи|отменить|стоп)[.!]*$/i
+const commentLine = (d) => (d && d.comment ? '\n💬 ' + esc(d.comment) : '')
+
+function confirmButtons(d) {
+  return inline([[['✅ Да, всё верно', 'confirm:yes'], ['✏️ Исправить', 'confirm:edit']], [[d && d.comment ? '💬 Изменить комментарий' : '💬 Добавить комментарий', 'confirm:comment']]])
+}
+
+// The comment's tap and the text after it, on either form's last step. Null
+// when the event is about something else.
+function commentStep(state, ev, summary) {
+  const d = state.draft
+  if (ev.kind === 'callback' && ev.data === 'confirm:comment') {
+    d.commenting = true
+    return [msg(state.chatId, COMMENT_ASK, inline([[['Без комментария', 'confirm:nocomment']]]))]
+  }
+  if (ev.kind === 'callback' && ev.data === 'confirm:nocomment') {
+    d.commenting = false
+    return [summary()]
+  }
+  if (d.commenting && ev.kind === 'text' && ev.text.trim()) {
+    d.commenting = false
+    d.comment = ev.text.trim().replace(/\s+/g, ' ').slice(0, 300)
+    return [summary()]
+  }
+  return null
 }
 
 // «давай лучше на лагерь» after a course lead was already sent: the new form
@@ -1521,7 +1533,7 @@ function dirNext(state) {
 
 function dirSummary(state) {
   const d = state.draft
-  return msg(state.chatId, 'Проверьте, всё верно?\n\n<b>' + esc(d.dir.title) + '</b>\n' + d.answers.map((a) => '• ' + esc(a.label) + ': ' + esc(a.value)).join('\n'), inline([[['✅ Да, всё верно', 'confirm:yes'], ['✏️ Исправить', 'confirm:edit']]]))
+  return msg(state.chatId, 'Проверьте, всё верно?\n\n<b>' + esc(d.dir.title) + '</b>\n' + d.answers.map((a) => '• ' + esc(a.label) + ': ' + esc(a.value)).join('\n') + commentLine(d), confirmButtons(d))
 }
 
 function dirStep(state, ev, nowMs) {
@@ -1531,10 +1543,12 @@ function dirStep(state, ev, nowMs) {
   const text = ev.kind === 'text' ? ev.text : ''
 
   if (state.step === 'dir_confirm') {
+    const c = commentStep(state, ev, () => dirSummary(state))
+    if (c) return { out: c, effects }
     if (ev.kind === 'callback' && ev.data === 'confirm:yes') {
       const get = (label) => (d.answers.find((a) => a.label === label) || {}).value || ''
       const lead = {
-        id: 'L' + nowMs.toString(36).toUpperCase(),
+        id: leadId(nowMs),
         createdAt: new Date(nowMs).toISOString(),
         chatId: state.chatId,
         source: 'бот',
@@ -1544,7 +1558,7 @@ function dirStep(state, ev, nowMs) {
         questions: d.questions || [],
         status: 'новая',
         direction: d.dir.title,
-        answers: d.answers.filter((a) => a.label !== 'Имя' && a.label !== 'Телефон').map((a) => a.label + ': ' + a.value),
+        answers: d.answers.filter((a) => a.label !== 'Имя' && a.label !== 'Телефон').map((a) => a.label + ': ' + a.value).concat(d.comment ? ['Комментарий: ' + d.comment] : []),
       }
       effects.push({ type: 'leadSave', lead, isNew: true, notice: '🆕 Новая заявка' })
       logLead(state, lead.id, d.dir.title, nowMs)
@@ -1643,7 +1657,10 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
   // «забей», «нетуу», «проехали» -- the parser reads these as giving up, which
   // the keyword list never could. The list stays as the fallback for when the
   // parser is off or failed.
-  if (text && (parsedIntent === 'cancel' || parsedIntent === 'decline' || CANCEL_RE.test(text))) return { out: cancelSignup(state, nowMs), effects }
+  const cancels = state.draft && state.draft.commenting
+    ? COMMENT_CANCEL.test(text.trim())
+    : parsedIntent === 'cancel' || parsedIntent === 'decline' || CANCEL_RE.test(text)
+  if (text && cancels) return { out: cancelSignup(state, nowMs), effects }
   if (ev.kind === 'callback' && ev.data === 'signup:cancel') return { out: cancelSignup(state, nowMs), effects }
   if (state.step === 'dir_field' || state.step === 'dir_confirm') return dirStep(state, ev, nowMs)
 
@@ -1770,9 +1787,11 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
   }
 
   if (state.step === 'confirm') {
+    const c = commentStep(state, ev, () => courseSummary(state, knowledge))
+    if (c) return { out: c, effects }
     if (ev.kind === 'callback' && ev.data === 'confirm:yes') {
       const lead = {
-        id: 'L' + nowMs.toString(36).toUpperCase(),
+        id: leadId(nowMs),
         createdAt: new Date(nowMs).toISOString(),
         chatId: state.chatId,
         source: 'бот',
@@ -1780,6 +1799,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
         children: [knowledge ? childLine(knowledge, state.draft.age) : state.draft.age],
         phone: state.draft.phone,
         questions: state.draft.questions || [],
+        answers: state.draft.comment ? ['Комментарий: ' + state.draft.comment] : [],
         status: 'новая',
       }
       effects.push({ type: 'leadSave', lead, isNew: true, notice: '🆕 Новая заявка' })
@@ -1813,7 +1833,7 @@ function adminLeadText(lead) {
   }
   const many = (lead.children || []).length > 1
   const kids = (lead.children || []).map((c, i) => personIcon(null, c) + ' ' + (many ? (i + 1) + ') ' : '') + esc(c)).join('\n')
-  const q = (lead.questions || []).length ? '\n❓ ' + lead.questions.map(esc).join('\n❓ ') : ''
+  const q = ((lead.answers || []).length ? '\n' + lead.answers.map((x) => '• ' + esc(x)).join('\n') : '') + ((lead.questions || []).length ? '\n❓ ' + lead.questions.map(esc).join('\n❓ ') : '')
   const nudge = lead.nudges ? '\n⏰ Напоминал(а) о себе: ' + lead.nudges + ' раз' : ''
   return '<b>Заявка на курс</b> · ' + esc(lead.source) + '\n👤 ' + esc(lead.name) + '\n' + kids + '\n📞 ' + esc(lead.phone) + q + nudge + (lead.status ? '\n\nСтатус: <b>' + esc(lead.status) + '</b>' : '')
 }
@@ -1903,7 +1923,8 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
     // what the parser chose, before the step reads the text: «давай на лагерь»
     // would otherwise be taken as a yes to the course form's consent
     if (ev.kind === 'text' && cfg.parsed && formAction(res, s, ev.text, cfg.parsed, knowledge, nowMs)) return res
-    if (ev.kind === 'text' && !cfg.parsed && switchSignup(res, s, ev.text, knowledge, nowMs)) return res
+    // (a comment that names the camp is still a comment)
+    if (ev.kind === 'text' && !cfg.parsed && !(s.draft && s.draft.commenting) && switchSignup(res, s, ev.text, knowledge, nowMs)) return res
     const r = signupStep(s, ev, nowMs, knowledge, cfg.parsed ? cfg.parsed.intent : null)
     res.out.push(...r.out)
     res.effects.push(...r.effects)

@@ -14,9 +14,11 @@ import { loadBotLib } from './lib.mjs'
 import { openStore } from './store.mjs'
 import { createTurn } from './turn.mjs'
 import { createSiteApi } from './site.mjs'
-import { createMailer } from './mail.mjs'
+import { createMailer, leadLetter } from './mail.mjs'
 import { leadsCsv } from './csv.mjs'
 import { createWebChat } from './webchat.mjs'
+import { allowedPath, pathsIn } from '../../deploy/cms/cms-guard.mjs'
+import { parseWidget, syncShow, dropNotOnBileton } from '../core/bileton.mjs'
 
 const lib = loadBotLib()
 const knowledge = buildKnowledge(repoRoot)
@@ -272,6 +274,71 @@ test('рассылка: телефон не спрашивается, заявк
   const lead = t.store.db.prepare('SELECT * FROM leads').get()
   assert.equal(lead.phone, '')
   assert.match(lead.direction, /Рассылка/)
+  t.close()
+})
+
+test('комментарий к заявке: кнопка на последнем шаге, «не надо звонить…» не отменяет, комментарий в заявке и письме', async () => {
+  const w = webRig()
+  await w.post({ text: 'запишите дочку, ей 7' })
+  await w.post({ tap: 'consent:yes' })
+  await w.post({ text: 'Марина' })
+  await w.post({ text: '7' })
+  let r = await w.post({ text: '89061234567' })
+  assert.ok(r.body.messages.some((m) => m.buttons.flat().some((b) => b.data === 'confirm:comment')), 'нет кнопки комментария')
+  r = await w.post({ tap: 'confirm:comment' })
+  assert.match(r.body.messages[0].html, /комментарий одним сообщением/)
+  r = await w.post({ text: 'не надо звонить до 18, у нас двое детей' })
+  const summary = r.body.messages.map((m) => m.html).join(' ')
+  assert.match(summary, /Проверьте/, 'комментарий отменил анкету или ушёл не туда: ' + summary)
+  assert.match(summary, /💬 не надо звонить до 18/)
+  assert.ok(r.body.messages.some((m) => m.buttons.flat().some((b) => /Изменить комментарий/.test(b.text))))
+  await w.post({ tap: 'confirm:yes' })
+  const lead = w.store.db.prepare('SELECT * FROM leads').get()
+  assert.ok(lead, 'заявка не сохранена')
+  assert.match(lead.answers, /Комментарий: не надо звонить до 18, у нас двое детей/)
+  assert.match(w.store.db.prepare('SELECT text FROM outbox').get().text, /Комментарий: не надо звонить до 18/)
+  assert.ok(!/двое детей/.test(JSON.stringify(w.store.db.prepare('SELECT * FROM turns').all())), 'комментарий попал в журнал')
+  w.close()
+})
+
+test('комментарий в анкете направления; «стоп» во время комментария отменяет, «Без комментария» возвращает к проверке', async () => {
+  const t = rig({ know: withDirections })
+  await t.say(74, 'хочу записаться на рассылку')
+  await t.tap(74, 'consent:yes')
+  await t.say(74, 'Олег')
+  await t.say(74, 'oleg@mail.ru')
+  await t.tap(74, 'confirm:comment')
+  await t.tap(74, 'confirm:nocomment')
+  assert.match(t.texts().at(-1), /Проверьте/)
+  await t.tap(74, 'confirm:comment')
+  await t.say(74, 'лучше присылайте по выходным')
+  assert.match(t.texts().at(-1), /💬 лучше присылайте по выходным/)
+  await t.tap(74, 'confirm:yes')
+  assert.match(t.store.db.prepare('SELECT answers FROM leads').get().answers, /Комментарий: лучше присылайте по выходным/)
+  // a plain «стоп» while writing one still cancels the form
+  await t.say(75, 'хочу записаться на рассылку')
+  await t.tap(75, 'consent:yes')
+  await t.say(75, 'Олег')
+  await t.say(75, 'oleg@mail.ru')
+  await t.tap(75, 'confirm:comment')
+  await t.say(75, 'стоп')
+  assert.equal(t.store.getChat(75).step, null, 'анкета не отменилась')
+  assert.equal(t.store.db.prepare('SELECT COUNT(*) AS n FROM leads').get().n, 1)
+  t.close()
+})
+
+test('комментарий с включённым разборщиком: не уходит ему и не переключает анкету, даже если называет лагерь', async () => {
+  const t = formRig({ 'запишите на курс': ['signup', 'course'], 'и на лагерь тоже хотим потом': ['signup_also', 'camp'] })
+  await t.say(76, 'запишите на курс')
+  await t.tap(76, 'consent:yes')
+  await t.say(76, 'Анна')
+  await t.say(76, '9')
+  await t.say(76, '89061234567')
+  await t.tap(76, 'confirm:comment')
+  await t.say(76, 'и на лагерь тоже хотим потом')
+  assert.deepEqual(t.parsedTexts, ['запишите на курс'], 'комментарий ушёл разборщику')
+  assert.equal(t.store.getChat(76).step, 'confirm', 'анкета переключилась')
+  assert.match(t.last().text, /💬 и на лагерь тоже хотим потом/)
   t.close()
 })
 
@@ -856,12 +923,34 @@ test('почта: письмо о заявке так и не ушло, разр
     transportFor: () => ({ sendMail: async (m) => { if (m.to === 'admin@mail.ru') throw new Error('ящик не принимает'); sentMail.push(m) } }),
   })
   t.store.commit({ chats: [], leads: [], statuses: [], unanswered: [], mail: [{ at: 'x', to: 'leads', subject: 'Заявка: Курсы, Тест', text: 'т', html: '' }] })
-  for (let i = 0; i < 12; i++) { await mailer.flush(); clock += 2 * 3600e3 }
+  // a night of the mail server being down is not a reason to give up
+  for (let i = 0; i < 20; i++) { await mailer.flush(); clock += 2 * 3600e3 }
+  assert.ok(t.store.db.prepare("SELECT next_at FROM outbox WHERE to_whom = 'leads'").get().next_at, 'сдался после 20 попыток')
+  for (let i = 0; i < 10; i++) { await mailer.flush(); clock += 2 * 3600e3 }
   assert.equal(t.store.db.prepare("SELECT next_at FROM outbox WHERE to_whom = 'leads'").get().next_at, null, 'не сдался')
   await mailer.flush()
   assert.equal(sentMail.length, 1, 'разработчику ничего не ушло')
   assert.equal(sentMail[0].to, 'dev@test.ru')
   assert.ok(/так и не ушло/.test(sentMail[0].text) && /Заявка: Курсы, Тест/.test(sentMail[0].text), sentMail[0].text)
+  t.close()
+})
+
+test('уведомление о заявке: один раз, без имени и телефона, даже когда почта не принимает', async () => {
+  const t = rig()
+  let clock = 1_000_000
+  const notices = []
+  const mailer = createMailer({
+    env: { SMTP_HOST: 'smtp.test', SMTP_USER: 'box@mail.ru', SMTP_PASS: 'x' },
+    store: t.store,
+    log: () => {},
+    now: () => clock,
+    notify: async (text) => { notices.push(text) },
+    transportFor: () => ({ sendMail: async () => { throw new Error('почта лежит') } }),
+  })
+  const lead = { id: 'L1', name: 'Анна Петрова', phone: '+7 906 111-22-33', direction: 'Квест «Тайна театра»', source: 'чат на сайте' }
+  t.store.commit({ chats: [], leads: [], statuses: [], unanswered: [], mail: [{ at: new Date(clock).toISOString(), ...leadLetter(lead, 'new', new Date(clock).toISOString()) }, { at: 'x', to: 'leads', subject: 'Сайт «Ключ»: афиша и Билетон', text: '', html: '' }] })
+  for (let i = 0; i < 3; i++) { await mailer.flush(); clock += 2 * 3600e3 }
+  assert.equal(JSON.stringify(notices), JSON.stringify(['📩 Новая заявка: Квест «Тайна театра». Подробности на почте.']))
   t.close()
 })
 
@@ -1044,6 +1133,51 @@ test('упавшая запись откатывается целиком', asyn
   assert.throws(() => t.store.commit({ statuses: [], unanswered: [], chats: [{ chat_id: '9', state: '{}', updated_at: 'x' }], leads: [{ nonexistent_column: 1, lead_id: 'Z' }] }))
   assert.equal(t.store.getChat(9), null, 'состояние осталось после отката')
   t.close()
+})
+
+test('старые чаты и отправленные письма удаляются, заявки и неотправленное остаются', async () => {
+  const t = rig()
+  t.store.commit({
+    statuses: [], unanswered: [],
+    chats: [{ chat_id: '1', state: '{}', updated_at: '2026-01-01T00:00:00.000Z' }, { chat_id: '2', state: '{}', updated_at: '2026-10-01T00:00:00.000Z' }],
+    leads: [{ lead_id: 'L1', created_at: '2026-01-01T00:00:00.000Z', updated_at: 'a', chat_id: '1', source: 'бот', name: 'А', phone: '1', children: '', questions: '', nudges: '0' }],
+    mail: [{ at: '2026-01-01T00:00:00.000Z', to: 'leads', subject: 'старое', text: '', html: '' }, { at: '2026-01-01T00:00:00.000Z', to: 'leads', subject: 'не ушло', text: '', html: '' }],
+  })
+  const old = t.store.db.prepare("SELECT id FROM outbox WHERE subject = 'старое'").get().id
+  t.store.mailSent(old, Date.parse('2026-01-02T00:00:00.000Z'))
+  assert.equal(t.store.pruneOld('2026-07-01T00:00:00.000Z'), 2)
+  assert.equal(t.store.getChat(1), null)
+  assert.ok(t.store.getChat(2))
+  assert.equal(t.store.db.prepare('SELECT COUNT(*) n FROM leads').get().n, 1)
+  assert.equal(t.store.db.prepare('SELECT subject FROM outbox').get().subject, 'не ушло')
+  t.close()
+})
+
+test('админка пишет только в контент и загрузки', async () => {
+  for (const p of ['src/content/afisha.json', './src/content/shows/simon.md', 'public/uploads/a.jpg', 'src/content']) assert.ok(allowedPath(p), p)
+  for (const p of ['vite.config.ts', 'package.json', '../src/content/a.json', '/opt/kluch/src/src/content/a.json', 'src/content/../../vite.config.ts', 'src/content/../vite.config.ts', 'src\\content\\..\\..\\deploy\\cms\\rebuild.sh', 'src/contentx/a.json', 'src/content/a\0.json', '', null]) assert.ok(!allowedPath(p), String(p))
+  // a path hidden deep in a request body is found too
+  const found = pathsIn({ action: 'persistEntry', params: { entry: { path: 'src/content/a.json' }, assets: [{ path: 'scripts/prerender.mjs' }], paths: ['x/y'] } })
+  assert.equal(JSON.stringify(found.sort()), JSON.stringify(['scripts/prerender.mjs', 'src/content/a.json', 'x/y']))
+})
+
+test('Билетон: даты читаются, через Новый год год следующий, пустой виджет ничего не стирает', async () => {
+  const html = '<script>window.WIDGET_DATA.EVENTS = [{"id":101,"full_date":"28 Декабря, Вс 18:00","age_limit":12,"link":"https://bileton.ru/e/101","price_range":"500","name":"Спектакль «Симон»"},{"id":102,"full_date":"4 Января, Вс 12:00","age_limit":null,"link":"https://bileton.ru/e/102","price_range":"","name":"Спектакль «Симон»"}];' + '\n</script>'
+  const s = parseWidget(html, '2026-12-01')
+  assert.equal(JSON.stringify(s.map((x) => [x.date, x.time, x.age])), JSON.stringify([['2026-12-28', '18:00', '12+'], ['2027-01-04', '12:00', '']]))
+  assert.throws(() => parseWidget('<html>страница поменялась</html>', '2026-12-01'))
+  const site = [
+    { date: '2026-11-20', title: 'Симон', time: '18:00' }, // прошедший: остаётся
+    { date: '2026-12-28', title: 'Симон', time: '17:00' }, // время поправится
+    { date: '2026-12-30', title: 'Симон', time: '18:00' }, // нет на Билетоне: уходит
+  ]
+  const r = syncShow(site, 'Симон', s, '2026-12-01')
+  assert.equal(JSON.stringify(r.items.map((i) => i.date + ' ' + i.time)), JSON.stringify(['2026-11-20 18:00', '2026-12-28 18:00', '2027-01-04 12:00']))
+  assert.equal(r.removed.length, 1)
+  // виджет не загрузился в этот раз: его даты под защитой
+  const d = dropNotOnBileton(site, [], ['Симон'], '2026-12-01')
+  assert.equal(d.items.length, 3)
+  assert.equal(dropNotOnBileton(site, [], [], '2026-12-01').items.length, 1)
 })
 
 let failed = 0

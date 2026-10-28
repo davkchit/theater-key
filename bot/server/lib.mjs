@@ -21,7 +21,7 @@ export function loadBotLib() {
 }
 
 // n8n's Code node hands callLlm an object with httpRequest(); this is the same
-// shape over fetch, so the key-rotation logic in lib.js works unchanged.
+// shape over fetch, so callLlm in lib.js works unchanged.
 export const fetchHelpers = {
   async httpRequest(o) {
     const r = await fetch(o.url, {

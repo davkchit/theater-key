@@ -53,6 +53,9 @@ export function createKnowledge({ env, repoRoot, store, log, alarm }) {
     }
   }
 
+  // the local copy is only as fresh as the last deploy of the bot: catch up
+  // with the site right away instead of answering by it for ten minutes
+  if (env.SITE_URL) void refresh()
   const timer = setInterval(refresh, REFRESH_MS)
   timer.unref()
 

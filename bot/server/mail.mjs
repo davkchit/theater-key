@@ -18,7 +18,9 @@
 import nodemailer from 'nodemailer'
 
 const RETRY_MS = [60e3, 5 * 60e3, 15 * 60e3, 60 * 60e3]
-const GIVE_UP_AFTER = 12
+// 1 + 5 + 15 minutes, then hourly: 30 tries is about a day (12 was 8.5 hours,
+// less than a night of a mail server being down)
+const GIVE_UP_AFTER = 30
 
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const msk = (iso) => new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
@@ -67,6 +69,16 @@ export function leadLetter(lead, kind, at) {
   return { to: 'leads', subject, text, html }
 }
 
+// The line a lead letter announces itself with in a messenger: its kind and
+// direction, never the name or phone (a foreign messenger gets no personal
+// data). Null for letters that are not about a lead.
+export function leadNotice(subject) {
+  const m = String(subject || '').match(/^(Заявка|Отмена|Ждёт звонка|Дополнение): (.*), [^,]*$/)
+  if (!m) return null
+  const head = { Заявка: '📩 Новая заявка', Отмена: '❌ Отмена заявки', 'Ждёт звонка': '⏰ Ждёт звонка', Дополнение: '➕ Дополнение к заявке' }[m[1]]
+  return head + ': ' + m[2] + '. Подробности на почте.'
+}
+
 export function devLetter(text) {
   return { to: 'dev', subject: 'Бот «Ключ»: ' + String(text).slice(0, 60), text, html: '' }
 }
@@ -89,7 +101,9 @@ export function devMail(store, env, text, nowMs = Date.now()) {
 // ---- sending
 
 // `transportFor` is injectable so tests can run without a mail server.
-export function createMailer({ env, store, log, transportFor = (t) => nodemailer.createTransport(t), now = () => Date.now() }) {
+// `notify` (optional) gets the short line of each lead letter as it first
+// goes out, whether the mail server takes it or not: a second channel.
+export function createMailer({ env, store, log, notify = null, transportFor = (t) => nodemailer.createTransport(t), now = () => Date.now() }) {
   const cfg = mailConfig(env)
   const transport = cfg ? transportFor(cfg.transport) : null
   let busy = false
@@ -109,6 +123,8 @@ export function createMailer({ env, store, log, transportFor = (t) => nodemailer
     busy = true
     try {
       for (const m of store.dueMail(now())) {
+        const notice = notify && m.tries === 0 && m.to === 'leads' ? leadNotice(m.subject) : null
+        if (notice) notify(notice).catch((e) => log('уведомление не ушло:', e.message))
         try {
           const r = await sendNow(m)
           store.mailSent(m.id, now())
