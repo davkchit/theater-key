@@ -17,6 +17,7 @@ import { createSiteApi } from './site.mjs'
 import { createMailer, leadLetter } from './mail.mjs'
 import { leadsCsv } from './csv.mjs'
 import { createWebChat } from './webchat.mjs'
+import { digestRequest } from './journal.mjs'
 import { allowedPath, pathsIn } from '../../deploy/cms/cms-guard.mjs'
 import { parseWidget, syncShow, dropNotOnBileton } from '../core/bileton.mjs'
 
@@ -959,6 +960,17 @@ test('отзыв: кот сожалеет и спрашивает, подроб�
   // the next message is a normal one again, read by the parser
   await t.say(61, 'а когда Симон?')
   assert.equal(parses, 2)
+  t.close()
+})
+
+test('разбор недели: пустая неделя без вызова модели, строки журнала попадают в запрос', async () => {
+  const t = rig()
+  assert.equal(digestRequest(t.store.db, '2026-01-01', 'm'), null)
+  t.store.commit({ chats: [], leads: [], statuses: [], unanswered: [], turns: [{ at: '2026-09-20T10:00:00.000Z', chat: 'abc', kind: 'текст', text: 'есть парковка?', step_before: '', parser: 'answer', answered_by: 'модель', signals: 'нет ответа в данных', buttons: '', step_after: '', outcome: '', reply: 'Уточнит администратор', data_version: '' }] })
+  const r = digestRequest(t.store.db, '2026-09-14', 'm')
+  assert.equal(r.count, 1)
+  assert.equal(r.body.model, 'm')
+  assert.ok(r.body.messages[1].content.includes('есть парковка?') && r.body.messages[1].content.includes('нет ответа в данных'))
   t.close()
 })
 

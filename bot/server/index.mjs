@@ -34,7 +34,7 @@ import { createTurn } from './turn.mjs'
 import { createMailer, devMail } from './mail.mjs'
 import { createSiteApi } from './site.mjs'
 import { leadsCsv } from './csv.mjs'
-import { KEEP_DAYS, turnsCsv, turnsSummary } from './journal.mjs'
+import { KEEP_DAYS, digestRequest, turnsCsv, turnsSummary } from './journal.mjs'
 import { createWebChat } from './webchat.mjs'
 
 const env = { ...loadEnv(), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TELEGRAM|ADMIN|LLM|YANDEX|SITE_URL|BOT_|KNOWLEDGE|SMTP|LEADS|MAIL_|DEV_EMAIL|ALLOWED_ORIGINS|TRUST_PROXY)/.test(k))) }
@@ -259,8 +259,25 @@ async function weeklyJournal() {
   if (!w.isMondayMorning || store.getKv('turnsSent') === w.key) return
   const from = new Date(Date.parse(w.key + 'T00:00:00+03:00') - 7 * 86400e3).toISOString()
   const csv = turnsCsv(store.db, from)
+  // the model's reading of the week, once per week: a letter that failed to
+  // go is retried hourly and must not ask the model again each time
+  let digest = store.getKv('digest:' + w.key)
+  if (digest == null) {
+    const req = digestRequest(store.db, from, env.LLM_MODEL)
+    digest = ''
+    if (req) {
+      try {
+        const r = await llm(req.body, 90000)
+        digest = String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '').trim()
+      } catch (e) {
+        log('разбор журнала моделью не удался:', e.message)
+        digest = '(разбор моделью не удался: ' + String(e.message).slice(0, 100) + ')'
+      }
+    }
+    store.putKv('digest:' + w.key, digest)
+  }
   try {
-    const text = 'Журнал кота за прошлую неделю во вложении, без имён и телефонов. Файл открывается в Excel.\n\n' + turnsSummary(store.db, from)
+    const text = (digest ? 'РАЗБОР НЕДЕЛИ\n\n' + digest + '\n\n---\n\n' : '') + 'Журнал кота за прошлую неделю во вложении, без имён и телефонов. Файл открывается в Excel.\n\n' + turnsSummary(store.db, from)
     await mailer.sendNow({ to: 'dev', subject: 'Журнал кота за неделю: ' + csv.count + ' сообщений', text, attachments: [{ filename: 'журнал-кота-' + w.key + '.csv', content: csv.text, contentType: 'text/csv; charset=utf-8' }] })
     store.putKv('turnsSent', w.key)
     log('журнал за неделю отправлен:', csv.count, 'строк')

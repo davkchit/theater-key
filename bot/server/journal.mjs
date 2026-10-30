@@ -96,6 +96,39 @@ export function turnsCsv(db, fromIso = '') {
   return { text: '﻿' + lines.join('\r\n') + '\r\n', count: rows.length }
 }
 
+// The week read by the model, for the top of the Monday letter: where people
+// left, what the cat did not know, what to fix and where (data, parser or
+// code). The rows are the journal's own, so no names or phones; the newest
+// part is dropped if the week does not fit.
+const DIGEST_MAX_CHARS = 60000
+export function digestRequest(db, fromIso, model) {
+  const rows = db.prepare('SELECT * FROM turns WHERE at >= ? ORDER BY id').all(fromIso)
+  if (!rows.length) return null
+  const lines = []
+  let size = 0
+  for (const r of rows) {
+    const line = [msk(r.at), r.chat, r.kind, r.text, 'разбор: ' + r.parser, 'ответил: ' + r.answered_by, r.signals && 'сигналы: ' + r.signals, r.outcome && 'итог: ' + r.outcome, 'кот: ' + String(r.reply || '').slice(0, 200)].filter(Boolean).join(' | ')
+    if (size + line.length > DIGEST_MAX_CHARS) break
+    lines.push(line)
+    size += line.length
+  }
+  const sys = [
+    'Ты разбираешь журнал чат-бота «кот театра» на сайте молодёжного театра «Ключ» за неделю. Бот отвечает на вопросы по данным театра и записывает на курсы и мероприятия. Читатель отчёта — разработчик бота.',
+    'Одна строка журнала — одно сообщение посетителя: время, разговор (код), что пришло, текст, что решил разборщик, кто ответил, сигналы, итог, ответ кота.',
+    'Напиши отчёт по-русски, коротко, без вступлений, такими разделами:',
+    'Итог недели: разговоры, заявки, брошенные анкеты, отзывы. Одна-две строки.',
+    'Где бот ошибся: конкретные случаи (цитата посетителя и что не так с ответом). Для каждого тип: данные (в данных театра нет или неверно), разборщик (не так понял, чего хочет человек), код (сломалась анкета, кнопка не та).',
+    'Чего не хватает в данных: вопросы, на которые не нашлось ответа, сгруппированные.',
+    'Что поправить: не больше пяти пунктов, самые важные первыми, для каждого где: админка сайта, разборщик или код.',
+    'Отзывы посетителей, если были.',
+    'Не выдумывай: только то, что видно в строках. Если всё в порядке, так и напиши. Без длинных тире.',
+  ].join('\n')
+  return {
+    count: rows.length,
+    body: { model, messages: [{ role: 'system', content: sys }, { role: 'user', content: lines.join('\n') }], max_tokens: 4000, temperature: 0.2 },
+  }
+}
+
 // A few lines for the letter the file comes with.
 export function turnsSummary(db, fromIso = '') {
   const rows = db.prepare('SELECT * FROM turns WHERE at >= ? ORDER BY id').all(fromIso)
