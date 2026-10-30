@@ -78,8 +78,14 @@ const llm = (body, budgetMs) => lib.callLlm(fetchHelpers, env, body, budgetMs)
 const notifyTg = env.TG_NOTIFY_TOKEN && env.TG_NOTIFY_CHAT ? createTelegram(env.TG_NOTIFY_TOKEN, redact, log) : null
 const notify = notifyTg
   ? async (text) => {
-      for (const chat of env.TG_NOTIFY_CHAT.split(',').map((c) => c.trim()).filter(Boolean))
-        await notifyTg.send({ method: 'sendMessage', payload: { chat_id: chat, text } })
+      // from a Russian server Telegram often times out, half the calls in a
+      // row: a few more rounds, a minute apart, before the notice is let go
+      for (const chat of env.TG_NOTIFY_CHAT.split(',').map((c) => c.trim()).filter(Boolean)) {
+        for (let round = 0; round < 4; round++) {
+          if (await notifyTg.send({ method: 'sendMessage', payload: { chat_id: chat, text } })) break
+          await new Promise((r) => setTimeout(r, 60e3))
+        }
+      }
     }
   : null
 const mailer = createMailer({ env, store, log, notify })
