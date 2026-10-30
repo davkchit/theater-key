@@ -48,6 +48,7 @@ export function journalRow({ ev, before, res, parsed, parseAsked, parseFailed, m
   for (const e of res.effects || []) {
     if (e.type === 'leadSave') outcome.push(e.isNew ? 'заявка: ' + (e.lead.direction || 'Курсы') : /Напоминает/.test(e.notice || '') ? 'напомнил о звонке' : 'дополнение к заявке')
     if (e.type === 'leadCancel') outcome.push('заявка отменена')
+    if (e.type === 'feedback') outcome.push('отзыв')
   }
   if (!stepBefore && stepAfter) outcome.push('анкета открыта: ' + formTitle(res.state))
   if (stepBefore && !stepAfter && !outcome.some((o) => o.startsWith('заявка:'))) outcome.push('анкета закрыта без заявки')

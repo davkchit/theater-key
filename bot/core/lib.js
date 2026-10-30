@@ -621,7 +621,8 @@ const PARSER_ACTIONS = {
   decline: 'отвечает «нет» на вопрос бота: «нет», «не согласен», «не хочу»',
   cancel: 'хочет прекратить запись или отменить заявку: «отмена», «стоп», «передумал», «забей», «не надо»',
   add_child: 'хочет добавить ещё одного ребёнка к уже отправленной заявке на курсы',
-  human: 'просит живого человека или телефон администратора, жалуется на бота или на то, что не перезвонили',
+  human: 'просит живого человека или телефон администратора, жалуется на то, что не перезвонили',
+  feedback: 'недоволен театром, спектаклем, занятиями или ботом, не хочет к вам, критикует, хочет оставить отзыв или пожелание',
 }
 
 // Which targets exist right now: the courses and every direction the admin
@@ -691,6 +692,7 @@ function parserMessages(userText, s, knowledge, nowMs) {
     '- в анкете: «нет», «нетуу», «неа», «не хочу» → decline; «отмена», «забей», «передумал» → cancel',
     '- «ты отменил заявку?», «моя заявка ушла?» → answer',
     '- «мне до сих пор не перезвонили», «позовите человека» → human',
+    '- «не хочу в театр», «мне не понравился спектакль», «скучно у вас», «ты тупой бот», «хочу оставить отзыв» → feedback',
     '- «скинь ссылку на запись на 1 ноября», «запиши на Симона», «билет на Еву Кюн» → answer: это билеты на спектакль, а не запись',
     'Купить билет на спектакль — это answer, не signup. Записать можно только на курсы и на направления из списка выше, на спектакли — никогда.',
     '«Сколько стоит курс?», «есть ли пробное?», «какая группа подойдёт?» — answer, course: человек собирает сведения о курсах.',
@@ -716,7 +718,7 @@ function parserMessages(userText, s, knowledge, nowMs) {
 }
 
 // the old labels, which signupStep and the fallback still speak
-const ACTION_INTENT = { answer: 'question', smalltalk: 'small_talk', unclear: 'other', signup: 'signup', signup_also: 'signup', form_answer: null, confirm: 'confirm', decline: 'decline', cancel: 'cancel', add_child: 'add_child', human: 'human' }
+const ACTION_INTENT = { answer: 'question', smalltalk: 'small_talk', unclear: 'other', signup: 'signup', signup_also: 'signup', form_answer: null, confirm: 'confirm', decline: 'decline', cancel: 'cancel', add_child: 'add_child', human: 'human', feedback: 'answer' }
 
 function parseTurnReply(raw, sourceText) {
   let text = String(raw == null ? '' : raw).trim()
@@ -1902,7 +1904,7 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
   if (cfg.useParser && !cfg.llmBlocked && cfg.parsed === undefined && ev.kind === 'text' && !isButtonLabel(ev.text)) {
     const prev = freshState(stateIn, ev.chatId, nowMs)
     // a plain answer to the form's question is read by the code, unparsed
-    if (!(prev.step && stepUnderstood(prev, ev.text, knowledge, nowMs))) {
+    if (!(prev.step && stepUnderstood(prev, ev.text, knowledge, nowMs)) && !(!prev.step && feedbackWaiting(prev, nowMs))) {
       res.parse = {
         messages: parserMessages(ev.text, prev, knowledge, nowMs),
         schema: parserSchema(knowledge, nowMs),
@@ -1954,6 +1956,12 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
     // the list of where the bot can sign up, under a general «как записаться?»
     if (ev.data === 'signup:menu') { res.out.push(msg(s.chatId, signupMenuText(knowledge, nowMs), mainKeyboard())); return res }
     if (ev.data === 'signup:start') { runSignupStart(res, s, nowMs, null, knowledge); return res }
+    if (ev.data === 'feedback:start') {
+      s.feedbackWaitAt = nowMs
+      res.out.push(msg(s.chatId, 'Напишите отзыв одним сообщением, я передам его театру.', inline([[['Не сейчас', 'feedback:no']]])))
+      return res
+    }
+    if (ev.data === 'feedback:no') { s.feedbackWaitAt = 0; res.out.push(msg(s.chatId, 'Хорошо 🐾 Если что, я здесь.', mainKeyboard())); return res }
     if (ev.data === 'signup:extra') { runSignupStart(res, s, nowMs, 'extra', knowledge); return res }
     if (ev.data === 'signup:new') { runSignupStart(res, s, nowMs, 'new', knowledge); return res }
     if (ev.data === 'mylead:keep') { res.out.push(msg(s.chatId, 'Хорошо, заявка остаётся, администратор перезвонит 🐾', mainKeyboard())); return res }
@@ -1979,6 +1987,14 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
   if (ev.kind === 'other' || ev.kind === 'contact') { res.out.push(msg(s.chatId, 'Напишите вопрос текстом или выберите кнопку внизу 👇', mainKeyboard())); return res }
 
   const t = ev.text
+  if (feedbackWaiting(s, nowMs)) {
+    s.feedbackWaitAt = 0
+    if (!COMMENT_CANCEL.test(t.trim()) && !isButtonLabel(t)) {
+      res.effects.push(feedbackEffect(s, t, nowMs))
+      res.out.push(msg(s.chatId, FEEDBACK_THANKS, mainKeyboard()))
+      return res
+    }
+  }
   if (/^\/start/.test(t)) {
     res.out.push(msg(s.chatId, 'Мяу, привет! 🐾 Я кот молодёжного театра «Ключ», живу за кулисами и знаю тут всё.\n\nПодскажу афишу и билеты, подберу курс по возрасту и сам запишу вас или ребёнка: на курсы, квест, лагерь, без звонка и в любое время. Жмите кнопки внизу или просто спросите.', mainKeyboard()))
     return res
@@ -2048,6 +2064,7 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
       // a closed direction: the model says so
     }
     if (a === 'human') { humanRequest(res.out, res.effects, s, t); return res }
+    if (a === 'feedback') { feedbackTurn(res, s, t, nowMs); return res }
     if (a === 'unclear') { res.out.push(msg(s.chatId, 'Не совсем понял, напишите, пожалуйста, иначе 🐾', mainKeyboard())); return res }
     // Everything else is answered by the model, and the button under the answer
     // is decided here, not read from the reply: a question about the courses or
@@ -2110,7 +2127,8 @@ function decide(ev, stateIn, globalIn, knowledge, cfg) {
 // The parser's action while a form is open. True when it was handled here;
 // false leaves the text to the form's step (an answer, a yes, a no).
 function formAction(res, s, text, parsed, knowledge, nowMs) {
-  const a = parsed.action
+  // a complaint in the middle of a form is answered like any other aside
+  const a = parsed.action === 'feedback' ? 'answer' : parsed.action
   if (a === 'cancel') { res.out.push(...cancelSignup(s, nowMs)); return true }
   if (a === 'signup' || a === 'signup_also') {
     const target = checkedTarget(knowledge, parsed.target, nowMs)
@@ -2166,6 +2184,31 @@ function cancelAsk(out, s, nowMs) {
 // get a "напоминает о себе" for any complaint at all: «ты же отменил» and «чето
 // тяжело с тобой» each sent one, about a lead nobody was waiting on.
 const WAITING_CALL = /(не|никто\s+не)\s+(по|пере)?звон|(не|никто\s+не)\s+связ|жд(у|ём|ем)\s+(звонк|ответ|связ)|когда\s+(мне\s+|нам\s+)?(позвон|перезвон|свяж)|до\s+сих\s+пор\s+(не|никто)/i
+
+// «не хочу в театр», «спектакль не понравился»: the model used to thank for
+// the "review" and move on. Now the cat is sorry, asks what was wrong, and
+// every such message goes to the theatre's mailbox as it is. The first one in
+// a while gets the question and a button; one right after it (the details)
+// gets a thanks.
+const FEEDBACK_ASK = 'Мяу, жаль это слышать 😿 Будет замурчательно, если расскажете, что именно не так: я передам театру. Можно написать прямо сейчас.'
+const FEEDBACK_THANKS = 'Спасибо, передал театру 🐾 Если захотите что-то спросить или записаться, я здесь.'
+const FEEDBACK_WINDOW_MS = 30 * 60 * 1000
+
+function feedbackWaiting(s, nowMs) {
+  return Boolean(s && s.feedbackWaitAt) && nowMs - s.feedbackWaitAt < FEEDBACK_WINDOW_MS
+}
+
+function feedbackEffect(s, text, nowMs) {
+  return { type: 'feedback', chatId: s.chatId, text: String(text).trim().slice(0, 1000), at: new Date(nowMs).toISOString() }
+}
+
+function feedbackTurn(res, s, text, nowMs) {
+  res.effects.push(feedbackEffect(s, text, nowMs))
+  const recent = s.feedbackAt && nowMs - s.feedbackAt < FEEDBACK_WINDOW_MS
+  s.feedbackAt = nowMs
+  if (recent) res.out.push(msg(s.chatId, FEEDBACK_THANKS, mainKeyboard()))
+  else res.out.push(msg(s.chatId, FEEDBACK_ASK, inline([[['💬 Оставить отзыв', 'feedback:start']]])))
+}
 
 function humanRequest(out, effects, s, text) {
   if (s.lastLead && !s.lastLead.cancelled && WAITING_CALL.test(String(text || ''))) {

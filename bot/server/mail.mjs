@@ -73,10 +73,25 @@ export function leadLetter(lead, kind, at) {
 // direction, never the name or phone (a foreign messenger gets no personal
 // data). Null for letters that are not about a lead.
 export function leadNotice(subject) {
+  if (/^Отзыв/.test(String(subject || ''))) return '💬 Новый отзыв из чата. Текст на почте.'
   const m = String(subject || '').match(/^(Заявка|Отмена|Ждёт звонка|Дополнение): (.*), [^,]*$/)
   if (!m) return null
   const head = { Заявка: '📩 Новая заявка', Отмена: '❌ Отмена заявки', 'Ждёт звонка': '⏰ Ждёт звонка', Дополнение: '➕ Дополнение к заявке' }[m[1]]
   return head + ': ' + m[2] + '. Подробности на почте.'
+}
+
+// What a visitor said about the theatre, as written. There is nobody to answer:
+// the chat has no contacts unless the person put them in the text.
+const NO_CONTACTS = 'Контактов в чате нет, ответить можно, только если человек оставил их в тексте.'
+export function feedbackLetter(text, at) {
+  const where = 'Из чата на сайте, ' + msk(at)
+  const html =
+    `<p style="font:15px/1.5 Arial,sans-serif;margin:0 0 4px"><b>Отзыв посетителя</b></p>` +
+    `<p style="font:13px Arial,sans-serif;color:#777;margin:0 0 14px">${esc(where)}</p>` +
+    `<p style="font:15px/1.5 Arial,sans-serif;white-space:pre-wrap">${esc(text)}</p>` +
+    `<p style="font:12px Arial,sans-serif;color:#999;margin-top:18px">${NO_CONTACTS}</p>`
+  const subject = 'Отзыв из чата: ' + String(text).replace(/\s+/g, ' ').slice(0, 50)
+  return { to: 'leads', subject, text: ['Отзыв посетителя', where, '', text, '', NO_CONTACTS].join('\n'), html }
 }
 
 export function devLetter(text) {

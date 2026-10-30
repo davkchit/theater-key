@@ -11,7 +11,7 @@
 // `deps` are injected so the whole turn can be run in a test with a fake model
 // and a fake Telegram (bot/server/test.mjs).
 
-import { devMail, leadLetter } from './mail.mjs'
+import { devMail, feedbackLetter, leadLetter } from './mail.mjs'
 import { journalRow } from './journal.mjs'
 
 export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now = () => Date.now() }) {
@@ -71,6 +71,8 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
       } else if (e.type === 'leadStatus') {
         p.statuses.push({ lead_id: e.leadId, status: e.status, status_by: e.by || '', updated_at: at })
         p.tg.push({ method: 'editMessageText', payload: { chat_id: e.adminChatId, message_id: e.adminMessageId, text: e.text, reply_markup: lib.adminLeadKeyboard(e.leadId) } })
+      } else if (e.type === 'feedback') {
+        p.mail.push({ at, ...feedbackLetter(e.text, e.at) })
       } else if (e.type === 'unanswered') {
         p.unanswered.push({ asked_at: e.at, chat_id: String(e.chatId), question: e.question })
       } else if (e.type === 'devAlert') {

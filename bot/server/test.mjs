@@ -935,6 +935,33 @@ test('почта: письмо о заявке так и не ушло, разр
   t.close()
 })
 
+test('отзыв: кот сожалеет и спрашивает, подробности уходят письмом, модель не нужна', async () => {
+  let parses = 0
+  const t = rig({
+    parser: true,
+    llm: async (body) => {
+      if (body.model !== 'p') throw new Error('модель не должна отвечать на отзыв')
+      parses++
+      return { choices: [{ message: { content: JSON.stringify({ action: 'feedback', target: '', topics: [], age: 0, show: '' }) } }] }
+    },
+  })
+  await t.say(61, 'не хочу в театр')
+  assert.ok(/жаль/.test(t.texts().at(-1)), t.texts().at(-1))
+  assert.ok(JSON.stringify(t.sent.at(-1).payload).includes('feedback:start'), 'нет кнопки отзыва')
+  await t.tap(61, 'feedback:start')
+  await t.say(61, 'спектакль был слишком длинный')
+  assert.equal(parses, 1, 'текст отзыва ушёл разборщику')
+  assert.ok(/Спасибо, передал/.test(t.texts().at(-1)), t.texts().at(-1))
+  const letters = t.store.db.prepare("SELECT subject, text FROM outbox WHERE to_whom = 'leads'").all()
+  assert.equal(letters.length, 2)
+  assert.ok(letters[1].text.includes('спектакль был слишком длинный'), letters[1].text)
+  assert.ok(/^Отзыв из чата/.test(letters[0].subject))
+  // the next message is a normal one again, read by the parser
+  await t.say(61, 'а когда Симон?')
+  assert.equal(parses, 2)
+  t.close()
+})
+
 test('уведомление о заявке: один раз, без имени и телефона, даже когда почта не принимает', async () => {
   const t = rig()
   let clock = 1_000_000
