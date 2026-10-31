@@ -1465,6 +1465,14 @@ const COMMENT_ASK = 'Напишите комментарий одним сооб
 const COMMENT_CANCEL = /^(отмена|отмена записи|отменить|стоп)[.!]*$/i
 const commentLine = (d) => (d && d.comment ? '\n💬 ' + esc(d.comment) : '')
 
+// The last words of a signup: the lead is with the administrator, who calls
+// soon, and the chat stays open for questions.
+function leadDoneText(name, title, phone) {
+  return 'Готово, ' + esc(name) + '! 🐾 Заявка «' + esc(title) + '» у администратора, ' +
+    (phone ? 'он скоро перезвонит на ' + esc(phone) + ' (звонят в рабочее время: ' + esc(CONTACT.hours) + ').' : 'он скоро с вами свяжется.') +
+    ' Если появятся вопросы, пишите сюда.'
+}
+
 function confirmButtons(d) {
   return inline([[['✅ Да, всё верно', 'confirm:yes'], ['✏️ Исправить', 'confirm:edit']], [[d && d.comment ? '💬 Изменить комментарий' : '💬 Добавить комментарий', 'confirm:comment']]])
 }
@@ -1566,7 +1574,7 @@ function dirStep(state, ev, nowMs) {
       logLead(state, lead.id, d.dir.title, nowMs)
       state.step = null
       state.draft = null
-      out.push(msg(state.chatId, 'Готово, ' + esc(lead.name) + '! Заявка «' + esc(lead.direction) + '» принята.' + (lead.phone ? ' Администратор перезвонит на ' + esc(lead.phone) + ' в рабочее время (' + esc(CONTACT.hours) + ').' : ' Мы свяжемся с вами.'), mainKeyboard()))
+      out.push(msg(state.chatId, leadDoneText(lead.name, lead.direction, lead.phone), mainKeyboard()))
       return { out, effects }
     }
     if (ev.kind === 'callback' && ev.data === 'confirm:edit') {
@@ -1808,7 +1816,7 @@ function signupStep(state, ev, nowMs, knowledge, parsedIntent) {
       logLead(state, lead.id, COURSE_TARGET.title, nowMs)
       state.lastLead = Object.assign({}, lead, { at: nowMs })
       state.step = null; state.draft = null
-      out.push(msg(state.chatId, 'Готово, ' + esc(lead.name) + '! Заявка принята, администратор перезвонит на ' + lead.phone + ' в рабочее время (' + esc(CONTACT.hours) + ').', mainKeyboard()))
+      out.push(msg(state.chatId, leadDoneText(lead.name, COURSE_TARGET.title, lead.phone), mainKeyboard()))
       return { out, effects }
     }
     if (ev.kind === 'callback' && ev.data === 'confirm:edit') {
