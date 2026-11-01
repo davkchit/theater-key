@@ -20,6 +20,25 @@ export function loadBotLib() {
   return ctx.__lib
 }
 
+// The answering model with a spare (LLM_FALLBACK_MODEL): an outside model can
+// be slow, down or switched off by the provider, and a cat that goes silent
+// loses the visitor. The main one gets 20 seconds, then the spare answers the
+// same request. Calls already made for the spare (the parser) go straight to it.
+const PRIMARY_MS = 20000
+export function llmWithFallback({ call, env, onFallback = () => {} }) {
+  const spare = env.LLM_FALLBACK_MODEL
+  return async (body, budgetMs) => {
+    if (!spare || body.model === spare) return call(body, budgetMs)
+    const first = Math.min(budgetMs, PRIMARY_MS)
+    try {
+      return await call(body, first)
+    } catch (e) {
+      onFallback(e)
+      return call({ ...body, model: spare }, Math.max(budgetMs - first, 15000))
+    }
+  }
+}
+
 // n8n's Code node hands callLlm an object with httpRequest(); this is the same
 // shape over fetch, so callLlm in lib.js works unchanged.
 export const fetchHelpers = {

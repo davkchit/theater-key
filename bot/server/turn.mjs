@@ -12,7 +12,7 @@
 // and a fake Telegram (bot/server/test.mjs).
 
 import { devMail, feedbackLetter, leadLetter } from './mail.mjs'
-import { journalRow } from './journal.mjs'
+import { journalRow, mask } from './journal.mjs'
 
 export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now = () => Date.now() }) {
   const ADMIN = env.ADMIN_CHAT_ID ? String(env.ADMIN_CHAT_ID) : ''
@@ -134,7 +134,10 @@ export function createTurn({ env, lib, store, getKnowledge, llm, send, log, now 
         const raw = await llm(
           {
             model: env.LLM_MODEL,
-            messages: res.model.messages.map((m) => ({ role: m.role, content: m.text })),
+            // a phone or an email the visitor typed never leaves for the model,
+            // which may run abroad (the theatre's own contacts are in the data,
+            // in the system message, and stay)
+            messages: res.model.messages.map((m) => ({ role: m.role, content: m.role === 'user' ? mask(m.text) : m.text })),
             max_tokens: 2000,
             temperature: 0.2,
             stream: false,

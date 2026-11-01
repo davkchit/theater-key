@@ -10,7 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { repoRoot } from '../scripts/env.mjs'
 import { buildKnowledge } from '../core/knowledge.mjs'
-import { loadBotLib } from './lib.mjs'
+import { loadBotLib, llmWithFallback } from './lib.mjs'
 import { openStore } from './store.mjs'
 import { createTurn } from './turn.mjs'
 import { createSiteApi } from './site.mjs'
@@ -971,6 +971,43 @@ test('разбор недели: пустая неделя без вызова �
   assert.equal(r.count, 1)
   assert.equal(r.body.model, 'm')
   assert.ok(r.body.messages[1].content.includes('есть парковка?') && r.body.messages[1].content.includes('нет ответа в данных'))
+  t.close()
+})
+
+test('запасная модель: основная упала, отвечает запасная, разборщик идёт сразу к ней', async () => {
+  const calls = []
+  let alarms = 0
+  const llm = llmWithFallback({
+    env: { LLM_FALLBACK_MODEL: 'oss' },
+    call: async (body, budget) => {
+      calls.push(body.model + ':' + budget)
+      if (body.model === 'ds') throw new Error('fetch failed')
+      return { choices: [{ message: { content: 'ok' } }] }
+    },
+    onFallback: () => alarms++,
+  })
+  const r = await llm({ model: 'ds', messages: [] }, 50000)
+  assert.equal(r.choices[0].message.content, 'ok')
+  assert.equal(JSON.stringify(calls), JSON.stringify(['ds:20000', 'oss:30000']))
+  assert.equal(alarms, 1)
+  await llm({ model: 'oss', messages: [] }, 15000)
+  assert.equal(calls.at(-1), 'oss:15000')
+  assert.equal(alarms, 1)
+  // without a spare nothing changes
+  const plainCalls = []
+  await llmWithFallback({ env: {}, call: async (b, t) => { plainCalls.push(t); return {} } })({ model: 'ds' }, 50000)
+  assert.equal(plainCalls[0], 50000)
+})
+
+test('телефон и почта посетителя не уходят в модель ответа', async () => {
+  let asked = null
+  const t = rig({ llm: async (body) => { asked = body; return { choices: [{ message: { content: 'Ответ.' } }] } } })
+  await t.say(71, 'расскажите про Симона, мой номер 8 906 123-45-67, почта a@b.ru')
+  const user = asked.messages.filter((m) => m.role === 'user').map((m) => m.content).join(' ')
+  assert.ok(!/123-45-67|a@b\.ru/.test(user), user)
+  assert.ok(/\[номер\]/.test(user) && /\[почта\]/.test(user), user)
+  // the theatre's own phone in the data is left alone
+  assert.ok(/\d{3}-\d{2}-\d{2}/.test(asked.messages[0].content))
   t.close()
 })
 

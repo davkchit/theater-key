@@ -1149,7 +1149,7 @@ async function callLlm(helpers, env, body, budgetMs) {
   for (let attempt = 0; attempt < 10 && Date.now() - started < budgetMs; attempt++) {
     let r
     try {
-      r = await helpers.httpRequest({ method: 'POST', url, headers, body, json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: 30000 })
+      r = await helpers.httpRequest({ method: 'POST', url, headers, body, json: true, returnFullResponse: true, ignoreHttpStatusErrors: true, timeout: Math.min(30000, Math.max(5000, budgetMs - (Date.now() - started))) })
     } catch (e) {
       last = 'сеть: ' + String((e && e.message) || e).slice(0, 150)
       await sleep(2000)

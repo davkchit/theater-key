@@ -10,6 +10,7 @@
 // variables (that is how Docker passes them):
 //   TELEGRAM_BOT_TOKEN, ADMIN_CHAT_ID
 //   LLM_BASE, LLM_AUTH, LLM_KEY, LLM_MODEL, LLM_PARSER_MODEL
+//   LLM_FALLBACK_MODEL  answers when LLM_MODEL fails or takes over 20 s (optional)
 //   SITE_URL          fetch knowledge.json from the deployed site (optional)
 //   BOT_DATA_DIR      where kluch.sqlite and bot.log live (default bot/data)
 //   BOT_PORT, BOT_HOST
@@ -26,7 +27,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { loadEnv, redactor, repoRoot } from '../scripts/env.mjs'
-import { loadBotLib, fetchHelpers } from './lib.mjs'
+import { loadBotLib, fetchHelpers, llmWithFallback } from './lib.mjs'
 import { openStore } from './store.mjs'
 import { createTelegram } from './telegram.mjs'
 import { createKnowledge } from './knowledge.mjs'
@@ -72,7 +73,11 @@ async function alarm(text) {
 }
 
 const knowledge = createKnowledge({ env, repoRoot, store, log, alarm })
-const llm = (body, budgetMs) => lib.callLlm(fetchHelpers, env, body, budgetMs)
+const llm = llmWithFallback({
+  call: (body, budgetMs) => lib.callLlm(fetchHelpers, env, body, budgetMs),
+  env,
+  onFallback: (e) => void alarm('Основная модель (' + env.LLM_MODEL + ') не ответила, ответила запасная (' + env.LLM_FALLBACK_MODEL + '): ' + String(e.message).slice(0, 150)),
+})
 
 // a turn only queues its letters (outbox); they go out after the turn, see handleUpdate
 const notifyTg = env.TG_NOTIFY_TOKEN && env.TG_NOTIFY_CHAT ? createTelegram(env.TG_NOTIFY_TOKEN, redact, log) : null

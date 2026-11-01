@@ -72,6 +72,8 @@ async function runCase(lib, knowledge, env, c, state) {
   const effects = []
   const buttons = []
   let modelCalls = 0
+  // how long each answer took: a slow model loses people however right it is
+  const answerMs = []
   let parseCalls = 0
   let tokens = 0
   let failed = null
@@ -110,7 +112,9 @@ async function runCase(lib, knowledge, env, c, state) {
       modelCalls += 1
       if (DRY) { said.push('(модель не вызывалась: --dry)'); continue }
       try {
+        const started = Date.now()
         const r = await callYandex(env, MODEL, res.model.messages)
+        answerMs.push(Date.now() - started)
         tokens += r.tokens
         const fin = lib.afterModel(res, r.text, t, knowledge)
         for (const m of fin.out) {
@@ -124,7 +128,7 @@ async function runCase(lib, knowledge, env, c, state) {
     }
   }
 
-  return { id: c.id, tags: c.tags || [], text: said.join('\n'), effects, buttons, modelCalls, tokens, failed }
+  return { id: c.id, tags: c.tags || [], text: said.join('\n'), effects, buttons, modelCalls, tokens, failed, answerMs }
 }
 
 // ------------------------------------------------------------------ checking
@@ -219,6 +223,8 @@ async function main() {
 
   console.log(`\n───────────────────────────────────`)
   console.log(`пройдено       ${passed}/${cases.length}  (${Math.round((passed / cases.length) * 100)}%)`)
+  const times = results.flatMap((x) => x.answerMs || []).sort((a, b) => a - b)
+  if (times.length) console.log(`время ответа   медиана ${(times[Math.floor(times.length / 2)] / 1000).toFixed(1)} с, худшее ${(times[times.length - 1] / 1000).toFixed(1)} с`)
   console.log(`вызовов модели ${calls}${USE_PARSER ? ` · разборов ${results.reduce((a, r) => a + (r.parseCalls || 0), 0)}` : ''}`)
   console.log(`токенов        ${tokens}${USE_PARSER ? ` + ${parserTokens} на разбор` : ''}${DRY ? '' : `  ≈ ${(cost + (parserTokens / 1000) * parserPrice).toFixed(1)} ₽`}`)
 
@@ -241,7 +247,7 @@ async function main() {
     total: cases.length,
     tokens,
     calls,
-    cases: Object.fromEntries(results.map((r) => [r.id, { problems: r.problems, text: r.text, tokens: r.tokens }])),
+    cases: Object.fromEntries(results.map((r) => [r.id, { problems: r.problems, text: r.text, tokens: r.tokens, answerMs: r.answerMs }])),
   }
 
   if (SAVE) {
